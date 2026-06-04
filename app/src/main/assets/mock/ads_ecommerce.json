@@ -1,0 +1,204 @@
+{
+  "page": 1,
+  "totalPages": 2,
+  "pageSize": 10,
+  "items": [
+    {
+      "type": "small_image",
+      "id": "ec_001",
+      "title": "小米 14 Ultra — 徕卡光学 影像旗舰",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/ec001/200/150",
+      "imagePosition": "LEFT",
+      "description": "骁龙 8 Gen 4 处理器，1 英寸大底主摄，120W 超级快充，限时直降 500 元。",
+      "advertiserName": "小米官方旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_xiaomi/100/100",
+      "channel": "ECOMMERCE",
+      "tags": [
+        {"name": "数码", "category": "category"},
+        {"name": "潮流", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "通勤", "category": "scene"}
+      ],
+      "likeCount": 8900, "collectCount": 4500, "shareCount": 2100,
+      "exposureCount": 156000, "clickCount": 23000
+    },
+    {
+      "type": "large_image",
+      "id": "ec_002",
+      "title": "Lululemon Align™ 瑜伽裤 — 裸感裸心",
+      "adType": "LARGE_IMAGE",
+      "coverImageUrl": "https://picsum.photos/seed/ec002/800/600",
+      "description": "Nulu™ 面料轻盈柔软如第二层肌肤，高腰设计收腹显瘦。新色「雾霾蓝」独家首发。",
+      "advertiserName": "lululemon 官方旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_lululemon/100/100",
+      "channel": "ECOMMERCE",
+      "tags": [
+        {"name": "服饰", "category": "category"},
+        {"name": "轻奢", "category": "style"},
+        {"name": "运动爱好者", "category": "audience"},
+        {"name": "户外", "category": "scene"}
+      ],
+      "likeCount": 4500, "collectCount": 3200, "shareCount": 890,
+      "exposureCount": 78000, "clickCount": 12000
+    },
+    {
+      "type": "video",
+      "id": "ec_003",
+      "title": "石头 G30 — 扫拖一体机器人革命",
+      "adType": "VIDEO",
+      "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
+      "coverImageUrl": "https://picsum.photos/seed/video_ec003/800/450",
+      "description": "自动洗拖布 + 自动集尘 + 自动补水，60 天免维护。AI 智能避障，识别 62 种物体。",
+      "advertiserName": "石头科技旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_roborock/100/100",
+      "channel": "ECOMMERCE",
+      "tags": [
+        {"name": "家居", "category": "category"},
+        {"name": "简约", "category": "style"},
+        {"name": "宝妈", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 3200, "collectCount": 2100, "shareCount": 780,
+      "exposureCount": 45600, "clickCount": 6700
+    },
+    {
+      "type": "small_image",
+      "id": "ec_004",
+      "title": "花西子同心锁口红 — 东方美学",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/ec004/200/150",
+      "imagePosition": "RIGHT",
+      "description": "微浮雕花卉膏体，丝绒雾感质地，含玫瑰精油滋润配方。七夕限定礼盒装。",
+      "advertiserName": "花西子官方旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_huaxizi/100/100",
+      "channel": "ECOMMERCE",
+      "tags": [
+        {"name": "美妆", "category": "category"},
+        {"name": "复古", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "聚会", "category": "scene"}
+      ],
+      "likeCount": 6700, "collectCount": 4500, "shareCount": 2100,
+      "exposureCount": 98700, "clickCount": 18000
+    },
+    {
+      "type": "large_image",
+      "id": "ec_005",
+      "title": "Switch 2 Pro — 任天堂次世代主机",
+      "adType": "LARGE_IMAGE",
+      "coverImageUrl": "https://picsum.photos/seed/ec005/800/600",
+      "description": "8 英寸 OLED 屏，4K 电视输出，向下兼容全部 Switch 卡带。预购送限定保护包。",
+      "advertiserName": "Nintendo 任天堂旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_nintendo/100/100",
+      "channel": "ECOMMERCE",
+      "tags": [
+        {"name": "数码", "category": "category"},
+        {"name": "潮流", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "聚会", "category": "scene"}
+      ],
+      "likeCount": 12300, "collectCount": 8900, "shareCount": 4500,
+      "exposureCount": 234000, "clickCount": 45000
+    },
+    {
+      "type": "small_image",
+      "id": "ec_006",
+      "title": "安克 GaNPrime 100W 氮化镓充电器",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/ec006/200/150",
+      "imagePosition": "LEFT",
+      "description": "3C1A 四口同充，100W 总功率，比原厂小 40%。智能功率分配，出差只带一个。",
+      "advertiserName": "Anker 安克旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_anker/100/100",
+      "channel": "ECOMMERCE",
+      "tags": [
+        {"name": "数码", "category": "category"},
+        {"name": "简约", "category": "style"},
+        {"name": "职场人", "category": "audience"},
+        {"name": "通勤", "category": "scene"}
+      ],
+      "likeCount": 3400, "collectCount": 2100, "shareCount": 670,
+      "exposureCount": 56700, "clickCount": 8900
+    },
+    {
+      "type": "video",
+      "id": "ec_007",
+      "title": "追觅 H40 Ultra — 洗地机天花板",
+      "adType": "VIDEO",
+      "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerMeltdowns.mp4",
+      "coverImageUrl": "https://picsum.photos/seed/video_ec007/800/450",
+      "description": "180° 平躺探底清洁，60°C 热水自清洁滚刷，30 分钟长效续航。养宠家庭必备。",
+      "advertiserName": "追觅科技旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_dreame/100/100",
+      "channel": "ECOMMERCE",
+      "tags": [
+        {"name": "家居", "category": "category"},
+        {"name": "简约", "category": "style"},
+        {"name": "宝妈", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 2100, "collectCount": 1300, "shareCount": 450,
+      "exposureCount": 34500, "clickCount": 4500
+    },
+    {
+      "type": "large_image",
+      "id": "ec_008",
+      "title": "雅诗兰黛小棕瓶第七代 — 修护传奇",
+      "adType": "LARGE_IMAGE",
+      "coverImageUrl": "https://picsum.photos/seed/ec008/800/600",
+      "description": "全新 Chronolux™ Power Signal 时钟肌因科技，夜间修护加速 40%。亚洲限定 100ml。",
+      "advertiserName": "雅诗兰黛官方旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_esteelauder/100/100",
+      "channel": "ECOMMERCE",
+      "tags": [
+        {"name": "美妆", "category": "category"},
+        {"name": "轻奢", "category": "style"},
+        {"name": "职场人", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 7800, "collectCount": 5600, "shareCount": 2300,
+      "exposureCount": 134000, "clickCount": 23000
+    },
+    {
+      "type": "small_image",
+      "id": "ec_009",
+      "title": "M Stand 精品挂耳咖啡礼盒",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/ec009/200/150",
+      "imagePosition": "RIGHT",
+      "description": "5 大产区单一产地精品豆，氮气锁鲜独立包装。办公室精品咖啡自由。买 2 送 1。",
+      "advertiserName": "M Stand 旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_mstand/100/100",
+      "channel": "ECOMMERCE",
+      "tags": [
+        {"name": "食品", "category": "category"},
+        {"name": "简约", "category": "style"},
+        {"name": "职场人", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 1800, "collectCount": 1200, "shareCount": 340,
+      "exposureCount": 23400, "clickCount": 3400
+    },
+    {
+      "type": "video",
+      "id": "ec_010",
+      "title": "华为 MateBook X Pro 2026 — 无边轻薄",
+      "adType": "VIDEO",
+      "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+      "coverImageUrl": "https://picsum.photos/seed/video_ec010/800/450",
+      "description": "980g 极致轻薄，14.2 英寸 3.1K OLED 触控屏，超级终端跨设备协同。学生优惠减 1000。",
+      "advertiserName": "华为官方旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_huawei/100/100",
+      "channel": "ECOMMERCE",
+      "tags": [
+        {"name": "数码", "category": "category"},
+        {"name": "轻奢", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "通勤", "category": "scene"}
+      ],
+      "likeCount": 5600, "collectCount": 3400, "shareCount": 1200,
+      "exposureCount": 87600, "clickCount": 12000
+    }
+  ]
+}

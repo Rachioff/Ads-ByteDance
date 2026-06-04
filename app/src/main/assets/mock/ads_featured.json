@@ -1,0 +1,204 @@
+{
+  "page": 1,
+  "totalPages": 2,
+  "pageSize": 10,
+  "items": [
+    {
+      "type": "large_image",
+      "id": "feat_001",
+      "title": "AirPods Pro 3 — 沉浸式降噪新境界",
+      "adType": "LARGE_IMAGE",
+      "coverImageUrl": "https://picsum.photos/seed/feat001/800/600",
+      "description": "自适应音频技术，根据环境智能调节降噪深度。全新 H3 芯片带来 2 倍主动降噪能力，续航长达 8 小时。",
+      "advertiserName": "Apple 官方旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_apple/100/100",
+      "channel": "FEATURED",
+      "tags": [
+        {"name": "数码", "category": "category"},
+        {"name": "潮流", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "通勤", "category": "scene"}
+      ],
+      "likeCount": 2340, "collectCount": 892, "shareCount": 345,
+      "exposureCount": 45200, "clickCount": 3890
+    },
+    {
+      "type": "small_image",
+      "id": "feat_002",
+      "title": "UNIQLO 2026 春夏轻薄羽绒服",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/feat002/200/150",
+      "imagePosition": "LEFT",
+      "description": "仅重 180g 可收纳至便携袋，UPF 50+ 防晒，出差旅行必备。",
+      "advertiserName": "优衣库官方旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_uniqlo/100/100",
+      "channel": "FEATURED",
+      "tags": [
+        {"name": "服饰", "category": "category"},
+        {"name": "简约", "category": "style"},
+        {"name": "职场人", "category": "audience"},
+        {"name": "通勤", "category": "scene"}
+      ],
+      "likeCount": 1567, "collectCount": 623, "shareCount": 178,
+      "exposureCount": 32100, "clickCount": 2100
+    },
+    {
+      "type": "video",
+      "id": "feat_003",
+      "title": "DJI Avata 3 — 第一人称飞行体验",
+      "adType": "VIDEO",
+      "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+      "coverImageUrl": "https://picsum.photos/seed/video_feat003/800/450",
+      "description": "4K/120fps 超广角拍摄，10 公里图传距离，室内外自由穿梭。新手上手只需 5 分钟。",
+      "advertiserName": "DJI 大疆创新",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_dji/100/100",
+      "channel": "FEATURED",
+      "tags": [
+        {"name": "数码", "category": "category"},
+        {"name": "潮流", "category": "style"},
+        {"name": "运动爱好者", "category": "audience"},
+        {"name": "户外", "category": "scene"}
+      ],
+      "likeCount": 4520, "collectCount": 1890, "shareCount": 890,
+      "exposureCount": 67800, "clickCount": 5600
+    },
+    {
+      "type": "small_image",
+      "id": "feat_004",
+      "title": "三顿半冷萃咖啡 — 3 秒速溶",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/feat004/200/150",
+      "imagePosition": "RIGHT",
+      "description": "100% 阿拉比卡精品豆，低温冷萃冻干技术，0 糖 0 脂，随时随地享受精品咖啡。",
+      "advertiserName": "三顿半旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_saturnbird/100/100",
+      "channel": "FEATURED",
+      "tags": [
+        {"name": "食品", "category": "category"},
+        {"name": "简约", "category": "style"},
+        {"name": "职场人", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 892, "collectCount": 445, "shareCount": 123,
+      "exposureCount": 18700, "clickCount": 1340
+    },
+    {
+      "type": "large_image",
+      "id": "feat_005",
+      "title": "Nike React Infinity Run 5 — 每一步都柔软",
+      "adType": "LARGE_IMAGE",
+      "coverImageUrl": "https://picsum.photos/seed/feat005/800/600",
+      "description": "全新 ReactX 泡棉中底，能量回馈提升 13%，加宽鞋楦适配亚洲脚型，城市路跑首选。",
+      "advertiserName": "Nike 官方旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_nike/100/100",
+      "channel": "FEATURED",
+      "tags": [
+        {"name": "服饰", "category": "category"},
+        {"name": "潮流", "category": "style"},
+        {"name": "运动爱好者", "category": "audience"},
+        {"name": "户外", "category": "scene"}
+      ],
+      "likeCount": 5670, "collectCount": 2340, "shareCount": 1023,
+      "exposureCount": 89200, "clickCount": 7800
+    },
+    {
+      "type": "video",
+      "id": "feat_006",
+      "title": "戴森 V16 Detect — 激光探尘黑科技",
+      "adType": "VIDEO",
+      "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+      "coverImageUrl": "https://picsum.photos/seed/video_feat006/800/450",
+      "description": "激光探测微米级灰尘，压电传感器实时显示吸入颗粒物数量与大小，LCD 屏一目了然。",
+      "advertiserName": "Dyson 戴森官方旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_dyson/100/100",
+      "channel": "FEATURED",
+      "tags": [
+        {"name": "家居", "category": "category"},
+        {"name": "轻奢", "category": "style"},
+        {"name": "宝妈", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 3210, "collectCount": 1567, "shareCount": 567,
+      "exposureCount": 54300, "clickCount": 4200
+    },
+    {
+      "type": "small_image",
+      "id": "feat_007",
+      "title": "Notion AI — 你的第二大脑已升级",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/feat007/200/150",
+      "imagePosition": "LEFT",
+      "description": "AI 自动整理笔记、生成摘要、翻译文档。学生/团队免费使用，知识管理从未如此简单。",
+      "advertiserName": "Notion Labs",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_notion/100/100",
+      "channel": "FEATURED",
+      "tags": [
+        {"name": "数码", "category": "category"},
+        {"name": "简约", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 1890, "collectCount": 1200, "shareCount": 456,
+      "exposureCount": 25600, "clickCount": 3200
+    },
+    {
+      "type": "large_image",
+      "id": "feat_008",
+      "title": "麦当劳巨无霸 50 周年限定套餐",
+      "adType": "LARGE_IMAGE",
+      "coverImageUrl": "https://picsum.photos/seed/feat008/800/600",
+      "description": "经典双层牛肉堡搭配限定版芝麻酱，附赠经典巨无霸钥匙扣。限量发售，售完即止！",
+      "advertiserName": "麦当劳中国",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_mcdonald/100/100",
+      "channel": "FEATURED",
+      "tags": [
+        {"name": "食品", "category": "category"},
+        {"name": "潮流", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "聚会", "category": "scene"}
+      ],
+      "likeCount": 8900, "collectCount": 3400, "shareCount": 2300,
+      "exposureCount": 120000, "clickCount": 15000
+    },
+    {
+      "type": "video",
+      "id": "feat_009",
+      "title": "Sony A7M5 — 全画幅微单新标杆",
+      "adType": "VIDEO",
+      "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+      "coverImageUrl": "https://picsum.photos/seed/video_feat009/800/450",
+      "description": "4500 万像素堆栈式 CMOS，AI 对焦识别 12 类主体，8 级防抖，专业视频创作者首选。",
+      "advertiserName": "Sony 索尼官方旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_sony/100/100",
+      "channel": "FEATURED",
+      "tags": [
+        {"name": "数码", "category": "category"},
+        {"name": "轻奢", "category": "style"},
+        {"name": "职场人", "category": "audience"},
+        {"name": "户外", "category": "scene"}
+      ],
+      "likeCount": 6780, "collectCount": 2890, "shareCount": 1340,
+      "exposureCount": 76500, "clickCount": 8900
+    },
+    {
+      "type": "small_image",
+      "id": "feat_010",
+      "title": "Peloton Bike+ — 居家单车健身新体验",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/feat010/200/150",
+      "imagePosition": "RIGHT",
+      "description": "24 英寸旋转触控屏，实时心率监测，全球教练直播带练。首月免费试用。",
+      "advertiserName": "Peloton 官方旗舰店",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_peloton/100/100",
+      "channel": "FEATURED",
+      "tags": [
+        {"name": "家居", "category": "category"},
+        {"name": "轻奢", "category": "style"},
+        {"name": "运动爱好者", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 2100, "collectCount": 980, "shareCount": 340,
+      "exposureCount": 28900, "clickCount": 2500
+    }
+  ]
+}

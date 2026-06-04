@@ -1,0 +1,204 @@
+{
+  "page": 1,
+  "totalPages": 2,
+  "pageSize": 10,
+  "items": [
+    {
+      "type": "large_image",
+      "id": "loc_001",
+      "title": "海底捞火锅 — 新品酸菜鱼锅底上线",
+      "adType": "LARGE_IMAGE",
+      "coverImageUrl": "https://picsum.photos/seed/loc001/800/600",
+      "description": "精选四川老坛酸菜搭配鲜活黑鱼片，酸辣鲜香。新店开业 7.8 折，必点招牌虾滑买一送一。",
+      "advertiserName": "海底捞火锅（朝阳大悦城店）",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_haidilao/100/100",
+      "channel": "LOCAL",
+      "tags": [
+        {"name": "食品", "category": "category"},
+        {"name": "潮流", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "聚会", "category": "scene"}
+      ],
+      "likeCount": 3400, "collectCount": 2100, "shareCount": 890,
+      "exposureCount": 45000, "clickCount": 6700
+    },
+    {
+      "type": "small_image",
+      "id": "loc_002",
+      "title": "乐刻健身 — 月卡 9.9 元畅练",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/loc002/200/150",
+      "imagePosition": "LEFT",
+      "description": "24 小时不打烊，全国 1500+ 门店通用。器械区 + 团课 + 私教随心选，首次到店送体测。",
+      "advertiserName": "乐刻运动（望京 SOHO 店）",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_lefit/100/100",
+      "channel": "LOCAL",
+      "tags": [
+        {"name": "家居", "category": "category"},
+        {"name": "简约", "category": "style"},
+        {"name": "运动爱好者", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 1200, "collectCount": 780, "shareCount": 230,
+      "exposureCount": 18900, "clickCount": 2800
+    },
+    {
+      "type": "video",
+      "id": "loc_003",
+      "title": "环球影城 — 夏日限定夜场票开售",
+      "adType": "VIDEO",
+      "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
+      "coverImageUrl": "https://picsum.photos/seed/video_loc003/800/450",
+      "description": "哈利波特城堡夜间灯光秀 + 侏罗纪水上特技表演，18:00 后入园仅需 299 元。",
+      "advertiserName": "北京环球度假区",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_universal/100/100",
+      "channel": "LOCAL",
+      "tags": [
+        {"name": "食品", "category": "category"},
+        {"name": "潮流", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "聚会", "category": "scene"}
+      ],
+      "likeCount": 7800, "collectCount": 5600, "shareCount": 3400,
+      "exposureCount": 123000, "clickCount": 23000
+    },
+    {
+      "type": "small_image",
+      "id": "loc_004",
+      "title": "西西弗书店 — 周末读书会招募",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/loc004/200/150",
+      "imagePosition": "RIGHT",
+      "description": "本周主题：《三体》宇宙社会学探讨。提供精品手冲咖啡 + 甜点，限量 20 席。",
+      "advertiserName": "西西弗书店（三里屯店）",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_sisyphe/100/100",
+      "channel": "LOCAL",
+      "tags": [
+        {"name": "数码", "category": "category"},
+        {"name": "复古", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 670, "collectCount": 450, "shareCount": 180,
+      "exposureCount": 8900, "clickCount": 1200
+    },
+    {
+      "type": "large_image",
+      "id": "loc_005",
+      "title": "蓝港国际影城 — IMAX 侏罗纪世界 4 首映",
+      "adType": "LARGE_IMAGE",
+      "coverImageUrl": "https://picsum.photos/seed/loc005/800/600",
+      "description": "激光 IMAX 厅 4K 高帧率放映，首映场赠送限定海报 + 爆米花套餐。双人票仅需 99 元。",
+      "advertiserName": "蓝色港湾国际影城",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_cinema/100/100",
+      "channel": "LOCAL",
+      "tags": [
+        {"name": "数码", "category": "category"},
+        {"name": "潮流", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "聚会", "category": "scene"}
+      ],
+      "likeCount": 4500, "collectCount": 2300, "shareCount": 1200,
+      "exposureCount": 56700, "clickCount": 8900
+    },
+    {
+      "type": "video",
+      "id": "loc_006",
+      "title": "超级猩猩 — 夜店风动感单车体验课",
+      "adType": "VIDEO",
+      "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+      "coverImageUrl": "https://picsum.photos/seed/video_loc006/800/450",
+      "description": "沉浸式灯光 + 现场 DJ 打碟，45 分钟燃脂 600 大卡。首次体验免费，按次付费不办卡。",
+      "advertiserName": "SUPERMONKEY 超级猩猩（国贸店）",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_supermonkey/100/100",
+      "channel": "LOCAL",
+      "tags": [
+        {"name": "家居", "category": "category"},
+        {"name": "潮流", "category": "style"},
+        {"name": "运动爱好者", "category": "audience"},
+        {"name": "聚会", "category": "scene"}
+      ],
+      "likeCount": 2300, "collectCount": 1200, "shareCount": 560,
+      "exposureCount": 34500, "clickCount": 5200
+    },
+    {
+      "type": "small_image",
+      "id": "loc_007",
+      "title": "同或绘馆 — 零基础油画体验",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/loc007/200/150",
+      "imagePosition": "LEFT",
+      "description": "专业老师 1v1 指导，提供全部画材 + 下午茶。情侣/闺蜜双人套餐立减 50 元。",
+      "advertiserName": "同或绘馆（798 艺术区店）",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_paint/100/100",
+      "channel": "LOCAL",
+      "tags": [
+        {"name": "美妆", "category": "category"},
+        {"name": "复古", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "聚会", "category": "scene"}
+      ],
+      "likeCount": 890, "collectCount": 560, "shareCount": 230,
+      "exposureCount": 12300, "clickCount": 1800
+    },
+    {
+      "type": "large_image",
+      "id": "loc_008",
+      "title": "盒马鲜生 — 周末海鲜市集特卖",
+      "adType": "LARGE_IMAGE",
+      "coverImageUrl": "https://picsum.photos/seed/loc008/800/600",
+      "description": "帝王蟹直降 200 元/只，鲜活波士顿龙虾 99 元/只，挪威三文鱼买二送一。现场加工堂食免费。",
+      "advertiserName": "盒马鲜生（望京万科店）",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_hema/100/100",
+      "channel": "LOCAL",
+      "tags": [
+        {"name": "食品", "category": "category"},
+        {"name": "简约", "category": "style"},
+        {"name": "宝妈", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 5600, "collectCount": 3400, "shareCount": 1800,
+      "exposureCount": 78900, "clickCount": 12000
+    },
+    {
+      "type": "video",
+      "id": "loc_009",
+      "title": "天真蓝 — 毕业季证件照限时特惠",
+      "adType": "VIDEO",
+      "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4",
+      "coverImageUrl": "https://picsum.photos/seed/video_loc009/800/450",
+      "description": "专业化妆师定制妆容，3 套服装任选，精修到满意为止。学生凭学生证享 6 折。",
+      "advertiserName": "天真蓝照相馆（中关村旗舰店）",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_naiveblue/100/100",
+      "channel": "LOCAL",
+      "tags": [
+        {"name": "美妆", "category": "category"},
+        {"name": "简约", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 1800, "collectCount": 1200, "shareCount": 450,
+      "exposureCount": 23400, "clickCount": 3400
+    },
+    {
+      "type": "small_image",
+      "id": "loc_010",
+      "title": "自如 — 毕业生租房免押金计划",
+      "adType": "SMALL_IMAGE",
+      "thumbnailUrl": "https://picsum.photos/seed/loc010/200/150",
+      "imagePosition": "RIGHT",
+      "description": "2026 应届毕业生凭学信网认证享押金全免 + 首月租金 5 折。全城 3000+ 房源可选。",
+      "advertiserName": "自如（北京站）",
+      "advertiserAvatar": "https://picsum.photos/seed/avatar_ziru/100/100",
+      "channel": "LOCAL",
+      "tags": [
+        {"name": "家居", "category": "category"},
+        {"name": "简约", "category": "style"},
+        {"name": "学生党", "category": "audience"},
+        {"name": "居家", "category": "scene"}
+      ],
+      "likeCount": 3400, "collectCount": 2800, "shareCount": 1200,
+      "exposureCount": 45600, "clickCount": 7800
+    }
+  ]
+}
