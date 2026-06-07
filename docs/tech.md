@@ -45,7 +45,7 @@
 ├─────────────────────┬───────────────────────────────────┤
 │   Local DataSource   │    Remote DataSource              │
 │   Mock JSON / Room   │    OkHttp + Retrofit              │
-│   SharedPreferences  │    Qwen API / OpenAI Compatible   │
+│   SharedPreferences  │    DeepSeek API / OpenAI Compatible   │
 │   Disk Cache         │                                   │
 └─────────────────────┴───────────────────────────────────┘
 ```
@@ -58,7 +58,7 @@
 
 ### 1.2 架构对比
 
-| 维度 | MVC | MVP | MVVM (本项目选择) |
+| 维度 | MVC | MVP | MVVM |
 |------|-----|-----|-------------------|
 | **View 职责** | 持有 Controller，处理 UI + 部分逻辑 | 通过 Presenter 接口解耦 | 仅渲染 UI，观察 ViewModel 状态 |
 | **逻辑层** | Controller（与 View 紧耦合） | Presenter（通过接口回调 View） | ViewModel（通过 StateFlow 推送状态） |

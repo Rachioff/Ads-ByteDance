@@ -73,6 +73,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.androidx.activity.compose)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
@@ -96,6 +97,7 @@ dependencies {
 
     // ── 图片加载 (Coil 3.x) ──
     implementation(libs.coil)
+    implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
 
     // ── 视频播放 (Media3 ExoPlayer) ──
@@ -110,6 +112,7 @@ dependencies {
 
     // ── 依赖注入 (Koin) ──
     implementation(libs.koin.android)
+    implementation(libs.koin.androidx.compose)
 
     // ── 协程 ──
     implementation(libs.coroutines.core)

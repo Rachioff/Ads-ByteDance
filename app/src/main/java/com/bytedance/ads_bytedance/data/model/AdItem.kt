@@ -34,10 +34,9 @@ sealed class AdItem {
     abstract val exposureCount: Int
     abstract val clickCount: Int
 
-    @kotlinx.serialization.Transient
+    // 运行时可变状态，仅子类中标记 @Transient（抽象属性无 backing field）
     abstract var isLiked: Boolean
 
-    @kotlinx.serialization.Transient
     abstract var isCollected: Boolean
 
     // ═══════════════════════════════════════════════════════════
@@ -62,12 +61,11 @@ sealed class AdItem {
         override val shareCount: Int = 0,
         override val exposureCount: Int = 0,
         override val clickCount: Int = 0,
-    ) : AdItem() {
         @kotlinx.serialization.Transient
-        override var isLiked: Boolean = false
+        override var isLiked: Boolean = false,
         @kotlinx.serialization.Transient
-        override var isCollected: Boolean = false
-    }
+        override var isCollected: Boolean = false,
+    ) : AdItem()
 
     @Serializable
     @SerialName("small_image")
@@ -88,12 +86,11 @@ sealed class AdItem {
         override val shareCount: Int = 0,
         override val exposureCount: Int = 0,
         override val clickCount: Int = 0,
-    ) : AdItem() {
         @kotlinx.serialization.Transient
-        override var isLiked: Boolean = false
+        override var isLiked: Boolean = false,
         @kotlinx.serialization.Transient
-        override var isCollected: Boolean = false
-    }
+        override var isCollected: Boolean = false,
+    ) : AdItem()
 
     @Serializable
     @SerialName("video")
@@ -114,10 +111,9 @@ sealed class AdItem {
         override val shareCount: Int = 0,
         override val exposureCount: Int = 0,
         override val clickCount: Int = 0,
-    ) : AdItem() {
         @kotlinx.serialization.Transient
-        override var isLiked: Boolean = false
+        override var isLiked: Boolean = false,
         @kotlinx.serialization.Transient
-        override var isCollected: Boolean = false
-    }
+        override var isCollected: Boolean = false,
+    ) : AdItem()
 }

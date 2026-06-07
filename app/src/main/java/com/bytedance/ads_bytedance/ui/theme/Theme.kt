@@ -1,58 +1,104 @@
 package com.bytedance.ads_bytedance.ui.theme
 
 import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
+import androidx.core.view.WindowCompat
 
-private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
-)
+// ═══════════════════════════════════════════════════════
+// Light ColorScheme — 字节风格浅色主题
+// ═══════════════════════════════════════════════════════
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
+    primary = Blue600,
+    onPrimary = White,
+    primaryContainer = Blue100,
+    onPrimaryContainer = Blue600,
 
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    secondary = Indigo500,
+    onSecondary = White,
+    secondaryContainer = Indigo100,
+    onSecondaryContainer = Indigo500,
+
+    background = Gray50,
+    onBackground = Gray900,
+
+    surface = White,
+    onSurface = Gray900,
+    surfaceVariant = Gray100,
+    onSurfaceVariant = Gray600,
+
+    outline = Gray200,
+    outlineVariant = Gray100,
+
+    error = ErrorRed,
+    onError = White,
+    errorContainer = LikeRedBg,
+    onErrorContainer = ErrorRed
 )
+
+// ═══════════════════════════════════════════════════════
+// Dark ColorScheme — 字节风格深色主题
+// ═══════════════════════════════════════════════════════
+
+private val DarkColorScheme = darkColorScheme(
+    primary = Blue400,
+    onPrimary = Gray900,
+    primaryContainer = Blue600,
+    onPrimaryContainer = Blue100,
+
+    secondary = Indigo500,
+    onSecondary = White,
+    secondaryContainer = Indigo500,
+    onSecondaryContainer = Indigo100,
+
+    background = DarkBg,
+    onBackground = DarkText,
+
+    surface = DarkSurface,
+    onSurface = DarkText,
+    surfaceVariant = DarkCard,
+    onSurfaceVariant = DarkTextSecondary,
+
+    outline = DarkBorder,
+    outlineVariant = DarkBorder,
+
+    error = ErrorRed,
+    onError = White,
+    errorContainer = Color(0xFF3B1515),
+    onErrorContainer = LikeRed
+)
+
+// ═══════════════════════════════════════════════════════
+// Theme Composable
+// ═══════════════════════════════════════════════════════
 
 @Composable
 fun AdsByteDanceTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        }
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
 
-        darkTheme -> DarkColorScheme
-        else -> LightColorScheme
+    // 设置系统状态栏颜色匹配主题
+    val view = LocalView.current
+    if (!view.isInEditMode) {
+        SideEffect {
+            val window = (view.context as Activity).window
+            val insetsController = WindowCompat.getInsetsController(window, view)
+            insetsController.isAppearanceLightStatusBars = !darkTheme
+        }
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = AppTypography,
         content = content
     )
 }
