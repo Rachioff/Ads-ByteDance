@@ -5,7 +5,7 @@
 
 ---
 
-## Day 1 — 2026-06-03（周三）：工程基础设施搭建
+## Day 1：工程基础设施搭建
 
 ### 完成内容
 
@@ -72,7 +72,7 @@
 
 ---
 
-## Day 2 — 2026-06-04（周四）：数据层完整实现
+## Day 2：数据层完整实现
 
 ### 完成内容
 
@@ -144,7 +144,7 @@
 
 ---
 
-## Day 3 — 2026-06-05（周五）：信息流 UI 层完整实现
+## Day 3：信息流 UI 层完整实现
 
 ### 完成内容
 
@@ -243,5 +243,194 @@
 - Compose snapshot 系统要求状态在**同一个 Composable scope 内读取**才能建立依赖——跨 scope 读取无效
 - `PrimaryTabRow` 替代 `TabRow` 是 Material3 的 API 演进方向
 - `HorizontalPager` 配合 `TabRow` 实现流畅的多频道滑动切换
+
+---
+
+## Day 4：视频播放器 + 频道切换增强
+
+### 完成内容
+
+#### 1. PlayerPool — ExoPlayer 实例池（player/pool/PlayerPool.kt）
+
+- 池大小上限 = 3，覆盖"当前播放 + 前驱 + 后继"场景
+- `acquire(context)`: 优先从 `ConcurrentLinkedQueue` 取出已有实例 → 池空则创建新 ExoPlayer
+  - 返回前自动暂停之前的活跃播放器（确保同时只有 1 个播放）
+  - 默认 `volume=0f`（外流静音）、`repeatMode=OFF`
+- `release(player)`: `stop()` → `clearMediaItems()` → `clearVideoSurface()` → 放入空闲队列
+  - 池满时直接 `release()` 销毁（防止 OOM）
+- `releaseAll()`: 页面销毁时释放池中所有播放器资源
+- 线程安全：`ConcurrentLinkedQueue` + `@Volatile activePlayer`
+
+#### 2. VideoPlayer Composable — Compose ↔ ExoPlayer 桥接（player/ui/VideoPlayer.kt）
+
+- 使用 `AndroidView` 将 ExoPlayer 的 `PlayerView`（传统 View）嵌入 Compose 组合树
+- `factory`: 创建 `PlayerView` 并绑定 `player` 实例
+- `update`: 当 player 实例切换时重新绑定
+- `DisposableEffect`: Composable 离开组合树时解绑（防止 Surface 销毁后 ExoPlayer 崩溃）
+
+#### 3. VideoCard 播放控制集成（feed/ui/card/VideoCard.kt 重写）
+
+- **状态机**: IDLE（封面+播放按钮） ↔ PLAYING（PlayerView + 控制层）
+- `Crossfade` 动画切换：封面态时 PlayerView 不存在（节省 Surface 内存），播放态时封面 AsyncImage 被回收
+- **播放控制**:
+  - 点击播放按钮 → `PlayerPool.acquire()` → `setMediaItem` → `prepare` → `play`
+  - 点击视频区域 → 暂停/继续（`playWhenReady` 切换）
+  - 静音按钮（右上角）→ `player.volume` 0f / 1f 切换
+  - 简易进度条（底部 `LinearProgressIndicator`，每 200ms 从 `player.currentPosition` 同步）
+- **生命周期**:
+  - `DisposableEffect`: 离开屏幕时归还播放器到 `PlayerPool`
+  - `Player.Listener.onPlaybackStateChanged`: 播放到 `STATE_ENDED` 时自动归还
+- **PlayerPool 注入**: 通过 `GlobalContext.get().get<PlayerPool>()` 从 Koin 获取
+
+#### 4. HomeScreen Tab 回到顶部
+
+- 点击已选中的 Tab → 递增该频道的 `scrollToTopTrigger` 计数器
+- FeedScreen 通过 `LaunchedEffect(scrollToTopTrigger)` 监听 → `listState.animateScrollToItem(0)`
+- 滑动切换 Tab（`HorizontalPager`）不触发回到顶部
+
+#### 5. 快速滑动检测
+
+- FeedScreen 通过 `snapshotFlow { listState.isScrollInProgress }.distinctUntilChanged()` 监听滚动状态
+- 通过 `onScrollStateChanged` 回调暴露给 HomeScreen
+- Day 4 为 click-to-play 模式，此检测为后续 auto-play 优化预留
+
+#### 6. Koin DI 注册
+
+- 在 AppModule 中激活 `single<PlayerPool> { PlayerPool() }` 全局单例声明
+
+### 文档更新
+
+- `schedule.md` → v1.2 Compose 适配版（全文从 XML View 术语重写为 Compose 术语）
+- `req.md` → v1.1（模块划分 / 术语更新为 Compose）
+- `struct.md` → 新增 player/pool/PlayerPool.kt、player/ui/VideoPlayer.kt
+
+### 遇到的问题与解决
+
+无新增编译问题。代码一次性编译通过，仅有 2 个 Material Icons deprecation 警告（`VolumeOff`/`VolumeUp` 迁移至 `AutoMirrored`），已修复。
+
+### 学到的内容
+
+- ExoPlayer 实例成本高（每个实例持有独立解码线程 + 缓冲区 + Surface），池化复用是必要的
+- Compose 与 View 系统的桥接：`AndroidView` 在 Compose 布局中预留空间，传统 View 的 Surface 渲染在此空间内独立进行
+- Crossfade 比 AnimatedVisibility 更适合"替换型"UI（确保非活跃子组件不在组合树中，释放资源）
+- `snapshotFlow` 是 Compose state → Kotlin Flow 的桥梁，适用于需要 `distinctUntilChanged` 等 Flow 操作符的场景
+- Kotlin 中 lambda 赋值给 `val` 时没有隐式 `return@label`，需要用 `?.let {}` 替代 `?: return@xxx`
+
+#### 8. 视频播放黑屏问题的诊断与修复
+
+- **问题**：点击播放按钮后，Crossfade 切换到播放态，视频区域显示黑屏（无画面，但无报错）
+- **排查**：
+  - 第一轮：怀疑 SurfaceView 打洞遮挡 Compose 覆盖层 → 确认已使用 TextureView（`app:surface_type="texture_view"`），排除
+  - 第二轮：怀疑 `MediaItem.fromUri()` 已弃用导致 API 行为变化 → 切换到 `MediaItem.Builder().setUri()` 后问题依旧，排除
+  - 第三轮：定位到根本原因——**`prepare()` 调用的时序问题**
+- **根因**：`startPlayback()` 中同步调用 `player.setMediaItem()` + `player.prepare()` + `player.playWhenReady = true`，此时 PlayerView 尚未创建（Crossfade 尚未切换），TextureView Surface 不存在。`prepare()` 在没有 Surface 的情况下初始化视频渲染管线 → 视频轨道未启用 → 即使后续 PlayerView 创建了 Surface，播放器也可能不会重新初始化视频渲染 → **黑屏**
+- **时序图**：
+  ```
+  ❌ 旧：acquire → setMediaItem → prepare → exoPlayer=player → Crossfade → VideoPlayer+Surface（已错过prepare窗口）
+  ✅ 新：acquire → exoPlayer=player → Crossfade → VideoPlayer → PlayerView布局 → TextureView Surface就绪 → view.post{ setMediaItem+prepare }
+  ```
+- **最终方案**：
+  - `VideoPlayer.kt`：新增 `videoUrl` 和 `isMuted` 参数，在 `AndroidView.factory` 中通过 `View.post {}` 延迟初始化播放（确保布局完成、Surface 就绪后再 `prepare`）
+  - `VideoPlayer.kt`：提取 `setupMedia()` 私有函数，factory 和 update 统一复用；`lastSetupPlayer` 追踪避免重复 setup（适配 retry 时 player 实例切换）
+  - `VideoCard.kt`：`startPlayback()` 移除 `setMediaItem/prepare/playWhenReady`，仅 acquire → 设 `playbackState=BUFFERING`（让 UI 在等待 Surface 就绪期间显示 loading 指示器）
+  - `MediaItem.Builder().setUri()` 替代已弃用的 `MediaItem.fromUri()`
+
+### 学到的内容（补充）
+
+- ExoPlayer 的 `prepare()` 时机对视频渲染至关重要：必须在 Surface 可用之后调用，否则视频渲染器可能永远不会被正确初始化
+- `View.post {}` 的执行时机：在当前帧的 measure/layout/draw 全部完成后执行，此时 TextureView 的 `onSurfaceTextureAvailable` 已回调完毕、Surface 已传递到 ExoPlayer
+- `AndroidView.update` 在 player 实例切换时触发（如 retry），需要在此处同样处理 media setup
+- `MediaItem.Builder().setUri()` 是 Media3 1.4+ 的推荐 API，替代 `MediaItem.fromUri()`
+
+#### 9. 重试按钮点击无效的 Debug 与修复
+
+- **问题**：播放失败后显示"加载失败 → 点击重试"，点击重试无任何反应
+- **排查**：追踪 `retry()` 执行链路：
+  ```
+  retry() → release(player)  // 放回池
+         → exoPlayer = null
+         → startPlayback()
+              → acquire()      // 从池中取出**同一个**实例
+              → exoPlayer = player (同一实例!)
+  ```
+- **根因**：同一帧内 `exoPlayer` 从 `PlayerA → null → PlayerA`（同一实例），Compose snapshot 只看到最终值没变 → **不触发重组** → Crossfade 不切换 → VideoPlayer 不重建 → `lastSetupPlayer` 仍匹配 → `setupMedia()` 永远不被调用
+- **最终方案**：
+  - retry 时**不归还池**（`player.stop()` + `player.clearMediaItems()` 保留 Surface 绑定），避免 same-instance 陷阱
+  - 新增 `retryTrigger: Int` 计数器，每次重试递增
+  - `VideoPlayer` 通过 `LaunchedEffect(retryTrigger)` 观察 → 重置 `lastSetupPlayer = null` → 通过 `view.post {}` 重新 `setupMedia()`
+  - 保存 `playerView` 引用到 mutableState，供 `LaunchedEffect` 调用 `post {}`
+- **时序**（retry）：
+  ```
+  点击重试 → stop + clearMediaItems → retryTrigger++
+          → LaunchedEffect(retryTrigger) 发射
+              → lastSetupPlayer = null
+              → view.post { setupMedia() }
+                  → setMediaItem → prepare → play
+  ```
+
+### 学到的内容（补充）
+
+- Compose `MutableState` 在同一帧内的多次写入，最终值不变时 Compose 跳过重组——这是优化但也是陷阱
+- ExoPlayer 的 `stop()` + `clearMediaItems()` 不会清除 Surface 绑定（只有 `clearVideoSurface()` 才会），retry 时保持 Surface 可以避免重建 PlayerView 的开销
+- 当 player 实例不变但需要重新初始化时，需要一个"信号"状态（如 `retryTrigger`）来驱动副作用，不能依赖实例引用变化
+- `LaunchedEffect(key)` 的 key 递增时会取消旧的协程并启动新的，天然适合"每次递增执行一次"的语义
+
+#### 10. 重试按钮点击无效的真正根因 — Z 轴点击拦截
+
+- **问题**：即使修复了 retry 逻辑（问题 9），重试按钮仍然无反应
+- **排查**：检查播放器态 Box 的 Z 轴层级：
+  ```
+  父 Box(fillMaxSize) 内子元素渲染顺序（后渲染 = 高层）:
+    Layer 0: VideoPlayer (AndroidView)
+    Layer 1: 缓冲 loading  (isBuffering)
+    Layer 1a: 暂停封面    (!playWhenReady)
+    Layer 2: 错误态        (hasError)  ← "点击重试" 按钮在这里
+    Layer 3: 播放/暂停按钮  (!playWhenReady && !hasError)
+    Layer 3: 全屏透明 Box   (无守卫!!) ← BUG! 永远渲染，吞噬所有点击
+    Layer 3: 静音按钮      (!hasError)
+    Layer 3: 进度条         (playWhenReady && !hasError)
+  ```
+- **根因**：全屏透明 Box 的 `Modifier.fillMaxSize().clickable{}` **没有任何条件守卫**，始终渲染在错误 UI 之上。用户点击"重试"时，点击事件被此 Box 的 `clickable` 修饰符消费——即使 `onClick` 里做了 `if (!hasError) togglePlayPause()`（hasError 时不做任何事），**`clickable` 仍然消费了事件**，下层错误 UI 永远收不到。
+- **最终方案**：
+  - 将全屏透明 click Box + 静音按钮包裹在 `if (!hasError)` 条件内，错误时完全不渲染这些覆盖层
+  - 新增 `errorMessage` 状态变量，在 `onPlayerError` 中捕获 `PlaybackException.localizedMessage`，展示在错误 UI 中（半透明白色小字），便于诊断根因
+  - `retry()` 中同时清除 `errorMessage`
+
+### 学到的内容（补充）
+
+- Compose Box 的子元素按声明顺序从下到上叠放，后声明的元素会拦截先声明元素的点击事件
+- `clickable { }` 即使 onClick lambda 为空或不做任何事，仍然会消费点击事件——它不会"透传"到下层
+- 当需要在 Box 中使用全屏可点击覆盖层时，必须先考虑它对其他交互元素的影响，并在不合适时完全移除（而非依赖 lambda 内的条件判断）
+- Z 轴层级调试技巧：检查 Box 子元素的声明顺序，越靠后越在上层
+
+#### 11. 视频 URL 全部失效 — GCS Bucket 403 Access Denied
+
+- **问题**：所有 mock 数据中的视频 URL（`commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBigger*.mp4`）返回 403 AccessDenied，Google Cloud Storage 不再允许匿名访问该 bucket
+- **排查**：浏览器直接打开 URL → `<Error><Code>AccessDenied</Code></Error>`
+- **根因**：GCS bucket 权限变更，匿名读取 (`storage.objects.get`) 被拒绝（同日测试 `storage.googleapis.com` 同样 403）
+- **最终方案**：全部 9 个视频 URL → `https://www.w3schools.com/html/mov_bbb.mp4`（788KB Big Buck Bunny，已验证 200 OK）
+- **影响文件**：`assets/mock/ads_featured.json`、`ads_ecommerce.json`、`ads_local.json`
+
+#### 12. 进度条升级 — LinearProgressIndicator → 可拖动 Slider
+
+- **需求**：外流（信息流中）也应有可拖动的进度条（非仅展示），用户可能想要 seek 到视频的特定位置
+- **实现方案**：
+  - 将 `LinearProgressIndicator`（只读）替换为 Material3 `Slider`（交互式）
+  - 新增 `isDragging` 状态变量：
+    - 拖动中：每 200ms 的进度同步循环跳过 `progress` 更新（避免与手指位置冲突）
+    - 松手时：`onValueChangeFinished` → 计算目标位置 `(progress * duration).toLong()` → `player.seekTo()` 跳转
+  - 视频**不暂停**（拖动时继续播放，仅视觉受手指控制，松手后立即 seek 到目标位置继续播放）
+  - 可见条件：`(playWhenReady || isDragging) && !hasError`
+- **交互流程**：
+  ```
+  手指触摸 Slider → onValueChange: progress=newValue, isDragging=true
+      ↓（手指滑动）
+  进度同步循环检测 !isDragging → 跳过自动更新，仅手指位置控制 progress
+      ↓（手指抬起）
+  onValueChangeFinished: isDragging=false → seekTo(progress*duration)
+      ↓
+  播放器跳转 + 继续播放，进度同步循环恢复更新
+  ```
+- **改动文件**：`feed/ui/card/VideoCard.kt`（4 处修改：import / 新增 isDragging / 同步循环守卫 / Slider 替换）
 
 ---

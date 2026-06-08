@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  PlayerView 的 TextureView 配置布局
+  因为 Media3 1.5.1 的 setSurfaceType() 和 SURFACE_TYPE_TEXTURE_VIEW 常量仍为 @hide，
+  但 XML 属性 app:surface_type 是公开 API，通过 layout inflation 传递配置。
+-->
+<androidx.media3.ui.PlayerView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/video_player_view"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    app:surface_type="texture_view"
+    app:resize_mode="fit"
+    app:use_controller="false"
+    app:show_buffering="never" />

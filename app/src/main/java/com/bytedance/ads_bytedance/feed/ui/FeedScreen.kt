@@ -20,9 +20,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.flow.distinctUntilChanged
 import com.bytedance.ads_bytedance.data.model.AdItem
 import com.bytedance.ads_bytedance.data.model.Channel
 import com.bytedance.ads_bytedance.data.model.LoadState
@@ -49,13 +51,19 @@ import org.koin.core.parameter.parametersOf
  * - 上拉加载更多（滚动到末尾自动触发）
  * - 标签过滤状态栏
  * - 空态 / 加载态 / 错误态分发
+ * - 点击当前频道 Tab → 回到顶部（通过 [scrollToTopTrigger] 触发）
+ * - 快速滑动检测（通过 [isScrollInProgress] 暴露，用于视频加载优化）
  *
  * @param channel 当前频道，通过 Koin parameter 注入给 FeedViewModel
+ * @param scrollToTopTrigger 父组件递增此值来触发列表滚动到顶部
+ * @param onScrollStateChanged 滚动状态变化回调（true = 正在滚动/Fling）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FeedScreen(
     channel: Channel = Channel.FEATURED,
+    scrollToTopTrigger: Int = 0,
+    onScrollStateChanged: ((Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val viewModel: FeedViewModel = koinViewModel(
@@ -80,6 +88,22 @@ fun FeedScreen(
                 }
             }
         }
+    }
+
+    // ── Tab 回到顶部 ──
+    LaunchedEffect(scrollToTopTrigger) {
+        if (scrollToTopTrigger > 0 && listState.layoutInfo.totalItemsCount > 0) {
+            listState.animateScrollToItem(0)
+        }
+    }
+
+    // ── 快速滑动检测 ──
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.isScrollInProgress }
+            .distinctUntilChanged()
+            .collect { isScrolling ->
+                onScrollStateChanged?.invoke(isScrolling)
+            }
     }
 
     // ── 上拉加载检测 ──

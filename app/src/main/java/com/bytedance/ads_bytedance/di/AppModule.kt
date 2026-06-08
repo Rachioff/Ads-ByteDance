@@ -11,6 +11,7 @@ import com.bytedance.ads_bytedance.data.local.MockJsonDataSource
 import com.bytedance.ads_bytedance.data.remote.AdApiService
 import com.bytedance.ads_bytedance.data.remote.RemoteDataSource
 import com.bytedance.ads_bytedance.data.repository.AdRepository
+import com.bytedance.ads_bytedance.player.pool.PlayerPool
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import org.koin.dsl.module
@@ -107,7 +108,8 @@ val appModule = module {
     // 视频播放器 (Day 4 实现)
     // ═══════════════════════════════════════════════════════
 
-    // single<PlayerPool> { PlayerPool() }
+    /** PlayerPool — ExoPlayer 实例池，全局单例（最多 3 实例复用） */
+    single<PlayerPool> { PlayerPool() }
 
     // ═══════════════════════════════════════════════════════
     // 埋点与行为 (Day 9-10 实现)

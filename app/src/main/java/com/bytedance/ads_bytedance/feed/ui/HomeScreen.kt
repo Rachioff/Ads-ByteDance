@@ -14,7 +14,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -25,8 +30,17 @@ import kotlinx.coroutines.launch
 /**
  * 首页 — TopAppBar + PrimaryTabRow + HorizontalPager 多频道信息流
  *
- * 顶部固定标题栏 + 标签栏，横向滑动切换频道。
- * 每个频道持有独立的 FeedViewModel 实例。
+ * ## Tab 回到顶部机制
+ * 当用户点击**已选中的 Tab** 时，递增该频道对应的 `scrollToTopTrigger`。
+ * FeedScreen 通过 [LaunchedEffect] 监听该值变化，触发
+ * `LazyListState.animateScrollToItem(0)`。
+ *
+ * **触发条件**：`pagerState.currentPage == index`（即用户点击的是当前页）
+ * **不触发**：滑动切换 Tab（`HorizontalPager` 滑动不会触发 onClick）
+ *
+ * ## 快速滑动检测
+ * HomeScreen 追踪每个频道的滚动状态，用于后续视频自动播放优化。
+ * 当前仅记录状态，尚未对 VideoCard 行为产生影响（Day 4 为 click-to-play）。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +50,20 @@ fun HomeScreen(modifier: Modifier = Modifier) {
 
     val pagerState = rememberPagerState(pageCount = { channels.size })
     val coroutineScope = rememberCoroutineScope()
+
+    /**
+     * 每个频道的"回到顶部"触发器。
+     * Key = Channel, Value = 触发次数。
+     * 每次点击已选中 Tab 时递增，FeedScreen 通过 LaunchedEffect 监听并滚动。
+     */
+    var scrollToTopTriggers by remember {
+        mutableStateOf(mapOf<Channel, Int>())
+    }
+
+    /** 当前各频道是否正在滚动（用于视频加载优化） */
+    var scrollStates by remember {
+        mutableStateOf(mapOf<Channel, Boolean>())
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -56,24 +84,33 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                     )
                 )
 
-                // ── 频道 Tab 栏（PrimaryTabRow — Material3 推荐 API）──
+                // ── 频道 Tab 栏 ──
                 PrimaryTabRow(
                     selectedTabIndex = pagerState.currentPage,
                     containerColor = MaterialTheme.colorScheme.background,
                     contentColor = MaterialTheme.colorScheme.primary
                 ) {
-                    channels.forEachIndexed { index, _ ->
+                    channels.forEachIndexed { index, channel ->
+                        val isSelected = pagerState.currentPage == index
                         Tab(
-                            selected = pagerState.currentPage == index,
+                            selected = isSelected,
                             onClick = {
-                                coroutineScope.launch {
-                                    pagerState.animateScrollToPage(index)
+                                if (isSelected) {
+                                    // ── 点击已选中 Tab → 回到顶部 ──
+                                    val current = scrollToTopTriggers[channel] ?: 0
+                                    scrollToTopTriggers = scrollToTopTriggers +
+                                            (channel to (current + 1))
+                                } else {
+                                    // ── 切换到其他 Tab ──
+                                    coroutineScope.launch {
+                                        pagerState.animateScrollToPage(index)
+                                    }
                                 }
                             },
                             text = {
                                 Text(
                                     text = tabTitles[index],
-                                    fontWeight = if (pagerState.currentPage == index)
+                                    fontWeight = if (isSelected)
                                         FontWeight.Bold else FontWeight.Normal
                                 )
                             }
@@ -90,8 +127,13 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) { pageIndex ->
+            val channel = channels[pageIndex]
             FeedScreen(
-                channel = channels[pageIndex],
+                channel = channel,
+                scrollToTopTrigger = scrollToTopTriggers[channel] ?: 0,
+                onScrollStateChanged = { isScrolling ->
+                    scrollStates = scrollStates + (channel to isScrolling)
+                },
                 modifier = Modifier.fillMaxSize()
             )
         }
