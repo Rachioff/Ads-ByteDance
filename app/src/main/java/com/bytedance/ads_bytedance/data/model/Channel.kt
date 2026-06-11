@@ -1,5 +1,6 @@
 package com.bytedance.ads_bytedance.data.model
 
+import androidx.compose.runtime.Stable
 import kotlinx.serialization.Serializable
 
 /**
@@ -7,6 +8,7 @@ import kotlinx.serialization.Serializable
  *
  * 决定信息流中的卡片布局样式和三子类分发。
  */
+@Stable
 @Serializable
 enum class AdType {
     LARGE_IMAGE,
@@ -19,6 +21,7 @@ enum class AdType {
  *
  * 对应顶部 Tab 栏的三个频道：精选（推荐排序）、电商、本地。
  */
+@Stable
 @Serializable
 enum class Channel {
     FEATURED,
@@ -31,6 +34,7 @@ enum class Channel {
  *
  * 用于 SmallImageAd 子类，决定左文右图还是左图右文布局。
  */
+@Stable
 @Serializable
 enum class ImagePosition {
     LEFT,

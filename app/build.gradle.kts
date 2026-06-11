@@ -125,6 +125,9 @@ dependencies {
     // ── 序列化 (Kotlinx Serialization) ──
     implementation(libs.kotlinx.serialization.json)
 
+    // ── 内存泄漏检测 (LeakCanary — Debug only) ──
+    debugImplementation(libs.leakcanary.android)
+
     // ── 测试 ──
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

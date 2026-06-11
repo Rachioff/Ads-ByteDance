@@ -1,5 +1,6 @@
 package com.bytedance.ads_bytedance.data.model
 
+import androidx.compose.runtime.Stable
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -17,6 +18,7 @@ import kotlinx.serialization.Serializable
  * 统一字段在此定义为抽象属性。
  * isLiked / isCollected 为运行时可变状态，标记 @Transient 不参与序列化。
  */
+@Stable
 @Serializable
 sealed class AdItem {
     abstract val id: String
@@ -43,6 +45,7 @@ sealed class AdItem {
     // 子类
     // ═══════════════════════════════════════════════════════════
 
+    @Stable
     @Serializable
     @SerialName("large_image")
     data class LargeImageAd(
@@ -67,6 +70,7 @@ sealed class AdItem {
         override var isCollected: Boolean = false,
     ) : AdItem()
 
+    @Stable
     @Serializable
     @SerialName("small_image")
     data class SmallImageAd(
@@ -92,6 +96,7 @@ sealed class AdItem {
         override var isCollected: Boolean = false,
     ) : AdItem()
 
+    @Stable
     @Serializable
     @SerialName("video")
     data class VideoAd(

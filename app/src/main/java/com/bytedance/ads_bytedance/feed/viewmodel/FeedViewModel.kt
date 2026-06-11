@@ -244,7 +244,9 @@ class FeedViewModel(
 
         // 异步委托给 Repository → DataSource（Mock: 内存计数联动 / Remote: API 调用）
         viewModelScope.launch {
-            val result = repository.updateInteraction(adId, isLiked = newLiked)
+            val result = withContext(Dispatchers.IO) {
+                repository.updateInteraction(adId, isLiked = newLiked)
+            }
             result.onSuccess { updatedAd ->
                 uiState = uiState.copy(
                     ads = replaceAdInList(uiState.ads, updatedAd),
@@ -266,7 +268,9 @@ class FeedViewModel(
 
         // 异步委托给 Repository → DataSource
         viewModelScope.launch {
-            val result = repository.updateInteraction(adId, isCollected = newCollected)
+            val result = withContext(Dispatchers.IO) {
+                repository.updateInteraction(adId, isCollected = newCollected)
+            }
             result.onSuccess { updatedAd ->
                 uiState = uiState.copy(
                     ads = replaceAdInList(uiState.ads, updatedAd),
@@ -282,7 +286,9 @@ class FeedViewModel(
 
         viewModelScope.launch {
             // 乐观更新：分享计数 +1（分享无取消操作，点击即计数）
-            val result = repository.updateInteraction(adId, incrementShare = true)
+            val result = withContext(Dispatchers.IO) {
+                repository.updateInteraction(adId, incrementShare = true)
+            }
             result.onSuccess { updatedAd ->
                 uiState = uiState.copy(
                     ads = replaceAdInList(uiState.ads, updatedAd),
@@ -309,8 +315,10 @@ class FeedViewModel(
         collectBehavior(ad.id, BehaviorType.CLICK)
 
         viewModelScope.launch {
-            // 递增点击计数
-            repository.incrementClick(ad.id)
+            // 递增点击计数（IO 操作：更新 Room 缓存）
+            withContext(Dispatchers.IO) {
+                repository.incrementClick(ad.id)
+            }
             _events.emit(FeedOneTimeEvent.NavigateToDetail(ad.id))
         }
     }

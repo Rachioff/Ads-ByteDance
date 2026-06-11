@@ -1684,3 +1684,170 @@ FeedViewModel.loadFirstPage(FEATURED)
 
 ---
 
+## Day 11：性能优化与稳定性提升
+
+### 完成内容
+
+#### 1. LazyColumn contentType 优化（FeedScreen.kt）
+
+- 在 `items(items = uiState.ads, key = { it.id })` 添加 `contentType = { it::class }`
+- 按 `LargeImageAd::class`、`SmallImageAd::class`、`VideoAd::class` 分组布局复用
+- Compose 可为同类型 item 复用布局节点，减少重组时的布局计算
+
+#### 2. Compose 稳定性注解（AdItem.kt / Tag.kt / Channel.kt）
+
+**@Stable 注解**：
+- `AdItem` 密封类 + `LargeImageAd` / `SmallImageAd` / `VideoAd` 三个子类
+- `AdType` / `Channel` / `ImagePosition` / `TagCategory` 四个枚举类
+
+**@Immutable 注解**：
+- `Tag` data class（所有字段为 val，不存在可变状态）
+
+**设计原理**：
+- `@Stable`/`@Immutable` 是 Compose runtime 的契约注解，告诉编译器"跳过不必要的相等性检查和重组"
+- AdItem 虽有 `var` 字段（`isLiked`/`isCollected`），但互动状态通过 `mutableStateMapOf` 独立追踪（不依赖 AdItem.equals()），所以 `@Stable` 安全
+- 效果：卡片 Composable 读取 AdItem 属性时不会因"对象不稳定"而触发父级重组
+
+#### 3. 内存管理增强（AdsApplication.kt）
+
+**onLowMemory() 重写**：
+- 清空 Coil 内存缓存（`imageLoader.memoryCache?.clear()`）
+- 释放 PlayerPool 中所有播放器（`pool.releaseAll()`）
+- 两者均通过 Koin `GlobalContext.get().get()` 获取，异常静默
+
+**onTrimMemory(level) 重写**：
+| Memory Level | 释放策略 |
+|-------------|---------|
+| TRIM_MEMORY_UI_HIDDEN | 释放所有播放器 + 清空图片内存缓存 |
+| TRIM_MEMORY_RUNNING_CRITICAL | 释放所有播放器 + 清空图片内存缓存 |
+| TRIM_MEMORY_RUNNING_LOW | 仅清空图片内存缓存 |
+| TRIM_MEMORY_BACKGROUND / MODERATE | 仅清空图片内存缓存 |
+
+**@Suppress("DEPRECATION")**：API 36 中 TRIM_MEMORY_RUNNING_LOW/MODERATE 被标记弃用但功能仍正常。
+
+#### 4. LeakCanary 集成
+
+- `gradle/libs.versions.toml`：新增 `leakcanary = "2.14"` 版本声明
+- `gradle/libs.versions.toml`：新增 `leakcanary-android` 依赖声明
+- `app/build.gradle.kts`：`debugImplementation(libs.leakcanary.android)`
+- LeakCanary 2.x 通过 ContentProvider 自动初始化，无需修改 Application
+
+#### 5. 全局异常捕获 CrashHandler（新建）
+
+**文件**：`common/util/CrashHandler.kt`
+
+- 实现 `Thread.UncaughtExceptionHandler` 接口
+- 捕获未处理异常后：
+  1. 写入 logcat（`Log.e(TAG, ...)` + 完整堆栈）
+  2. 委托给系统默认处理器（让进程正常终止）
+- `AdsApplication.onCreate()` 中通过 `installCrashHandler()` 安装
+- 防御设计：`installCrashHandler` 中 defaultHandler 为 null 时跳过
+
+#### 6. ANR 检查：互动操作 Dispatchers.IO 包裹（FeedViewModel.kt）
+
+将以下方法的 Repository 调用显式包裹在 `withContext(Dispatchers.IO)` 中：
+
+| 方法 | 修复的调用 | 说明 |
+|------|----------|------|
+| `toggleLike()` | `repository.updateInteraction(adId, isLiked)` | Room 写入 + Mock 内存同步 |
+| `toggleCollect()` | `repository.updateInteraction(adId, isCollected)` | 同上 |
+| `share()` | `repository.updateInteraction(adId, incrementShare)` | 同上 |
+| `navigateToDetail()` | `repository.incrementClick(ad.id)` | Room 写入 |
+
+此前这些操作在 `viewModelScope.launch {}` 中运行（继承父协程上下文，可能为 Main），
+现在确保磁盘 I/O 在 `Dispatchers.IO` 执行。
+
+#### 7. ProGuard/R8 混淆规则（proguard-rules.pro 完整重写）
+
+从空模板重写为覆盖 8 大类依赖的完整 keep 规则：
+
+| 类别 | 规则内容 |
+|------|---------|
+| **通用** | `SourceFile` / `LineNumberTable` / `Signature` / `Annotations` / `Exceptions` |
+| **Kotlin** | `kotlin.Metadata` 伴生对象保留 |
+| **Kotlinx Serialization** | `$$serializer` 类 + `serializer()` 方法 + `@Serializable` 注解类 |
+| **Retrofit** | API 接口保留（动态代理调用）+ `Continuation` 保留 |
+| **OkHttp** | okhttp3 / okio 包保留 |
+| **Coil 3.x** | coil3 包保留 |
+| **Room** | Entity / DAO / `AppDatabase_Impl` 保留 |
+| **Koin** | DI 模块声明 + ViewModel 子类保留（反射创建） |
+| **ExoPlayer/Media3** | `androidx.media3` 包保留（反射加载渲染器） |
+| **Coroutines** | `MainDispatcherFactory` / `CoroutineExceptionHandler` / volatile fields |
+| **Compose** | `androidx.compose.*` 全保留 + Material3 保留 |
+| **Navigation** | `androidx.navigation.*` 保留 |
+| **Lifecycle** | `androidx.lifecycle.*` 保留 |
+| **其他** | `BuildConfig` / `R$` class members / `Parcelable.CREATOR` / 枚举 `values()`/`valueOf()` |
+
+#### 8. NetworkConfig 连接池配置应用（NetworkConfig.kt）
+
+- 在 `createOkHttpClient()` 的 `OkHttpClient.Builder` 中添加 `connectionPool(...)`
+- 参数：`maxIdleConnections=5`（30 秒 keep-alive）
+- 此前 `MAX_IDLE_CONNECTIONS` / `KEEP_ALIVE_DURATION_SECONDS` 已定义但未应用（死代码）
+
+### 架构设计要点
+
+#### Compose 重组优化链路
+
+```
+Compose 编译器分析
+  ├─ @Stable/Immutable 注解：跳过不必要的重组检查
+  │   └─ AdItem + Tag + AdType + Channel + ImagePosition + TagCategory
+  ├─ contentType：按类型分组布局节点
+  │   └─ LargeImageAd / SmallImageAd / VideoAd 各自独立的布局缓存
+  └─ mutableStateMapOf：精确重组
+      └─ likedAdIds / collectedAdIds / aiContentMap 按 adId 独立粒度
+```
+
+#### 内存管理响应链
+
+```
+系统低内存事件
+  ├─ onLowMemory()
+  │   ├─ Coil memoryCache.clear()
+  │   └─ PlayerPool.releaseAll()
+  │
+  └─ onTrimMemory(level)
+      ├─ TRIM_MEMORY_UI_HIDDEN/CRITICAL → 全部释放
+      ├─ TRIM_MEMORY_RUNNING_LOW → 仅清图片缓存
+      └─ TRIM_MEMORY_BACKGROUND/MODERATE → 仅清图片缓存
+```
+
+#### ANR 防护检查清单
+
+| 操作类别 | 是否在 Dispatchers.IO | 位置 |
+|---------|---------------------|------|
+| 广告数据加载 | ✅ `withContext(IO)` | FeedViewModel (loadFirstPage/refresh/loadMore/filterByTag) |
+| 互动状态更新 | ✅ `withContext(IO)` | FeedViewModel (toggleLike/toggleCollect/share) — Day 11 修复 |
+| 点击计数递增 | ✅ `withContext(IO)` | FeedViewModel (navigateToDetail) — Day 11 修复 |
+| 曝光计数递增 | ❌ `launch {}`（Repository 内部无 IO 操作，仅内存递增）| FeedViewModel (onAdExposed) |
+| AI 内容生成 | ✅ 内部 `AiContentGenerator` 在 IO 线程调度 | FeedViewModel (generateAiContent) |
+| 行为采集 | ✅ `BehaviorCollector` 内部 IO 线程 | FeedViewModel/DetailViewModel/ChatViewModel |
+
+### 涉及文件清单
+
+| 操作 | 文件 | 变更说明 |
+|------|------|---------|
+| MODIFY | `feed/ui/FeedScreen.kt` | 添加 `contentType = { it::class }` |
+| MODIFY | `data/model/AdItem.kt` | 添加 `@Stable` 注解（sealed class + 3 子类） + import |
+| MODIFY | `data/model/Tag.kt` | 添加 `@Immutable`（Tag）+ `@Stable`（TagCategory）+ import |
+| MODIFY | `data/model/Channel.kt` | 添加 `@Stable`（AdType/Channel/ImagePosition）+ import |
+| MODIFY | `AdsApplication.kt` | 新增 onLowMemory/onTrimMemory + installCrashHandler + import |
+| CREATE | `common/util/CrashHandler.kt` | 全局未处理异常捕获器 |
+| MODIFY | `feed/viewmodel/FeedViewModel.kt` | 4 个互动方法包裹 `withContext(Dispatchers.IO)` |
+| MODIFY | `common/network/NetworkConfig.kt` | OkHttpClient.Builder 添加 connectionPool + import ConnectionPool |
+| MODIFY | `app/proguard-rules.pro` | 从空模板重写为完整混淆规则（180+ 行） |
+| MODIFY | `gradle/libs.versions.toml` | 新增 `leakcanary = "2.14"` + 依赖声明 |
+| MODIFY | `app/build.gradle.kts` | 新增 `debugImplementation(libs.leakcanary.android)` |
+
+### 验证结果
+
+- `./gradlew assembleDebug` — **BUILD SUCCESSFUL** (39 tasks, 首次 2m19s, 后续缓存)
+- 修复后无编译错误，仅 `TRIM_MEMORY_RUNNING_LOW` / `TRIM_MEMORY_MODERATE` 弃用警告（已加 @Suppress）
+
+### 文档更新
+
+- `struct.md`：更新日期 + 新增 CrashHandler.kt
+- `docs/daily-report.md`：Day 11 日报
+
+---
+

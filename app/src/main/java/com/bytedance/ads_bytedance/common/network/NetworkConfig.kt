@@ -3,6 +3,7 @@ package com.bytedance.ads_bytedance.common.network
 import com.bytedance.ads_bytedance.BuildConfig
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import kotlinx.serialization.json.Json
+import okhttp3.ConnectionPool
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -90,6 +91,15 @@ object NetworkConfig {
 
             // 网络层连接失败自动重试（OkHttp 内建）
             retryOnConnectionFailure(true)
+
+            // 连接池配置：复用 TCP 连接，减少握手开销
+            connectionPool(
+                ConnectionPool(
+                    maxIdleConnections = MAX_IDLE_CONNECTIONS,
+                    keepAliveDuration = KEEP_ALIVE_DURATION_SECONDS,
+                    timeUnit = TimeUnit.SECONDS
+                )
+            )
 
             // 自定义重试拦截器：覆盖连接失败以外的场景（超时、EOF 等）
             addInterceptor(retryInterceptor())

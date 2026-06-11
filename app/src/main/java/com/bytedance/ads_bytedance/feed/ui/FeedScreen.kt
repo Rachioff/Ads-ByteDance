@@ -203,7 +203,8 @@ fun FeedScreen(
                         // ── 广告卡片 ──
                         items(
                             items = uiState.ads,
-                            key = { it.id }
+                            key = { it.id },
+                            contentType = { it::class }  // 按 AdItem 子类分组，Compose 可为同类型复用布局节点
                         ) { ad ->
                             // mutableStateMapOf 读取建立 snapshot 依赖 → 精确重组该 item
                             val liked = viewModel.likedAdIds[ad.id] ?: ad.isLiked
