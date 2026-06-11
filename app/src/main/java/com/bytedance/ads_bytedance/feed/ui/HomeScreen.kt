@@ -5,7 +5,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
@@ -41,10 +47,24 @@ import kotlinx.coroutines.launch
  * ## 快速滑动检测
  * HomeScreen 追踪每个频道的滚动状态，用于后续视频自动播放优化。
  * 当前仅记录状态，尚未对 VideoCard 行为产生影响（Day 4 为 click-to-play）。
+ *
+ * ## 导航
+ * [onNavigateToDetail] 回调由外部 NavController 提供，点击卡片时触发导航到详情页。
+ *
+ * @param onNavigateToDetail 导航到详情页回调（adId → Unit），由 MainActivity NavHost 提供
+ * @param onNavigateToSearch 导航到常规搜索页
+ * @param onNavigateToChat 导航到 AI 对话搜索页
+ * @param onNavigateToStats 导航到数据统计页（Day 9 新增）
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(modifier: Modifier = Modifier) {
+fun HomeScreen(
+    onNavigateToDetail: (String) -> Unit = {},
+    onNavigateToSearch: () -> Unit = {},
+    onNavigateToChat: () -> Unit = {},
+    onNavigateToStats: () -> Unit = {},
+    modifier: Modifier = Modifier
+) {
     val channels = Channel.entries
     val tabTitles = listOf("精选", "电商", "本地")
 
@@ -77,6 +97,29 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                             fontSize = 18.sp,
                             fontWeight = FontWeight.SemiBold
                         )
+                    },
+                    actions = {
+                        IconButton(onClick = onNavigateToSearch) {
+                            Icon(
+                                imageVector = Icons.Filled.Search,
+                                contentDescription = "搜索广告",
+                                tint = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                        IconButton(onClick = onNavigateToChat) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoAwesome,
+                                contentDescription = "AI 对话搜索",
+                                tint = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
+                        IconButton(onClick = onNavigateToStats) {
+                            Icon(
+                                imageVector = Icons.Filled.BarChart,
+                                contentDescription = "数据统计",
+                                tint = MaterialTheme.colorScheme.onBackground
+                            )
+                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.background,
@@ -134,6 +177,8 @@ fun HomeScreen(modifier: Modifier = Modifier) {
                 onScrollStateChanged = { isScrolling ->
                     scrollStates = scrollStates + (channel to isScrolling)
                 },
+                isScrollInProgress = scrollStates[channel] ?: false,
+                onNavigateToDetail = onNavigateToDetail,
                 modifier = Modifier.fillMaxSize()
             )
         }

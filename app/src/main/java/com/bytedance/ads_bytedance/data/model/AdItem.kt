@@ -28,15 +28,15 @@ sealed class AdItem {
     abstract val channel: Channel
     abstract val tags: List<Tag>
     abstract val aiSummary: String?
-    abstract val likeCount: Int
-    abstract val collectCount: Int
-    abstract val shareCount: Int
-    abstract val exposureCount: Int
-    abstract val clickCount: Int
+    abstract var exposureCount: Int
+    abstract var clickCount: Int
 
-    // 运行时可变状态，仅子类中标记 @Transient（抽象属性无 backing field）
+    // 运行时可变状态（互动计数 + 布尔标记），@Transient 不参与序列化
+    // likeCount/collectCount/shareCount 为 var 以支持 Repository.updateInteraction() 模拟服务端计数更新
+    abstract var likeCount: Int
+    abstract var collectCount: Int
+    abstract var shareCount: Int
     abstract var isLiked: Boolean
-
     abstract var isCollected: Boolean
 
     // ═══════════════════════════════════════════════════════════
@@ -56,11 +56,11 @@ sealed class AdItem {
         override val channel: Channel,
         override val tags: List<Tag> = emptyList(),
         override val aiSummary: String? = null,
-        override val likeCount: Int = 0,
-        override val collectCount: Int = 0,
-        override val shareCount: Int = 0,
-        override val exposureCount: Int = 0,
-        override val clickCount: Int = 0,
+        override var likeCount: Int = 0,
+        override var collectCount: Int = 0,
+        override var shareCount: Int = 0,
+        override var exposureCount: Int = 0,
+        override var clickCount: Int = 0,
         @kotlinx.serialization.Transient
         override var isLiked: Boolean = false,
         @kotlinx.serialization.Transient
@@ -81,11 +81,11 @@ sealed class AdItem {
         override val channel: Channel,
         override val tags: List<Tag> = emptyList(),
         override val aiSummary: String? = null,
-        override val likeCount: Int = 0,
-        override val collectCount: Int = 0,
-        override val shareCount: Int = 0,
-        override val exposureCount: Int = 0,
-        override val clickCount: Int = 0,
+        override var likeCount: Int = 0,
+        override var collectCount: Int = 0,
+        override var shareCount: Int = 0,
+        override var exposureCount: Int = 0,
+        override var clickCount: Int = 0,
         @kotlinx.serialization.Transient
         override var isLiked: Boolean = false,
         @kotlinx.serialization.Transient
@@ -106,11 +106,11 @@ sealed class AdItem {
         override val channel: Channel,
         override val tags: List<Tag> = emptyList(),
         override val aiSummary: String? = null,
-        override val likeCount: Int = 0,
-        override val collectCount: Int = 0,
-        override val shareCount: Int = 0,
-        override val exposureCount: Int = 0,
-        override val clickCount: Int = 0,
+        override var likeCount: Int = 0,
+        override var collectCount: Int = 0,
+        override var shareCount: Int = 0,
+        override var exposureCount: Int = 0,
+        override var clickCount: Int = 0,
         @kotlinx.serialization.Transient
         override var isLiked: Boolean = false,
         @kotlinx.serialization.Transient

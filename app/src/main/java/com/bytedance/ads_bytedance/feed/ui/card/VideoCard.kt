@@ -105,6 +105,7 @@ import org.koin.core.context.GlobalContext
 @Composable
 fun VideoCard(
     ad: AdItem.VideoAd,
+    aiContent: com.bytedance.ads_bytedance.ai.model.AiGeneratedContent? = null,
     onLikeClick: () -> Unit,
     onCollectClick: () -> Unit,
     onShareClick: () -> Unit,
@@ -112,6 +113,8 @@ fun VideoCard(
     onCardClick: () -> Unit,
     onPlayClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isScrollInProgress: Boolean = false,
+    nextVideoCoverUrl: String? = null,  // 下一个视频的封面 URL，用于预加载
     playerPool: PlayerPool = GlobalContext.get().get()
 ) {
     // ═══════════════════════════════════════════════════════
@@ -236,6 +239,22 @@ fun VideoCard(
         hasError = false
         errorMessage = null
         onPlayClick()
+
+        // ── 预加载下一个视频的封面到磁盘缓存 ──
+        // 当前视频开始播放时，后台异步缓存下一个视频封面，
+        // 用户滑到下一个视频时封面已就绪，无需等待网络加载。
+        nextVideoCoverUrl?.let { nextUrl ->
+            try {
+                val imageLoader: coil3.ImageLoader =
+                    org.koin.core.context.GlobalContext.get().get()
+                val preloadRequest = coil3.request.ImageRequest.Builder(context)
+                    .data(nextUrl)
+                    .build()
+                imageLoader.enqueue(preloadRequest)
+            } catch (_: Exception) {
+                // Koin 未就绪或 ImageLoader 不可用，跳过预加载
+            }
+        }
     }
 
     val togglePlayPause: () -> Unit = {
@@ -553,6 +572,13 @@ fun VideoCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+
+            // AI 摘要（优先用 AI 生成内容，否则回退到静态 aiSummary）
+            val summaryText = aiContent?.summary ?: ad.aiSummary
+            if (!summaryText.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                AiSummaryLabel(summary = summaryText)
             }
 
             if (ad.tags.isNotEmpty()) {

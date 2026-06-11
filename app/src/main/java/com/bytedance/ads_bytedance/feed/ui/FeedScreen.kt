@@ -1,5 +1,6 @@
 package com.bytedance.ads_bytedance.feed.ui
 
+import android.content.Intent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,8 +24,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.flow.distinctUntilChanged
+import com.bytedance.ads_bytedance.analytics.tracker.ExposureTracker
 import com.bytedance.ads_bytedance.data.model.AdItem
 import com.bytedance.ads_bytedance.data.model.Channel
 import com.bytedance.ads_bytedance.data.model.LoadState
@@ -57,6 +60,8 @@ import org.koin.core.parameter.parametersOf
  * @param channel 当前频道，通过 Koin parameter 注入给 FeedViewModel
  * @param scrollToTopTrigger 父组件递增此值来触发列表滚动到顶部
  * @param onScrollStateChanged 滚动状态变化回调（true = 正在滚动/Fling）
+ * @param isScrollInProgress 当前频道是否正在快速滑动（由 HomeScreen 传入）
+ * @param onNavigateToDetail 导航到详情页回调（adId → Unit），由 HomeScreen → MainActivity NavHost 提供
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -64,6 +69,8 @@ fun FeedScreen(
     channel: Channel = Channel.FEATURED,
     scrollToTopTrigger: Int = 0,
     onScrollStateChanged: ((Boolean) -> Unit)? = null,
+    isScrollInProgress: Boolean = false,
+    onNavigateToDetail: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val viewModel: FeedViewModel = koinViewModel(
@@ -72,19 +79,36 @@ fun FeedScreen(
     )
     val uiState = viewModel.uiState
     val listState = rememberLazyListState()
+    val context = LocalContext.current
 
     // ── 一次性事件处理 ──
     LaunchedEffect(Unit) {
         viewModel.events.collect { event ->
             when (event) {
                 is FeedOneTimeEvent.ShowToast -> {
-                    // TODO: Day 5 集成 Snackbar
+                    // Toast 由系统层处理，此处预留 Snackbar 集成点
                 }
                 is FeedOneTimeEvent.NavigateToDetail -> {
-                    // TODO: Day 5 导航到详情页
+                    onNavigateToDetail(event.adId)
                 }
                 is FeedOneTimeEvent.ShowShareSheet -> {
-                    // TODO: Day 5 调用系统分享
+                    // 从当前列表中查找广告
+                    val ad = uiState.ads.find { it.id == event.adId }
+                    if (ad != null) {
+                        val shareText = buildString {
+                            appendLine(ad.title)
+                            if (ad.description.isNotBlank()) {
+                                appendLine(ad.description)
+                            }
+                            append("— 来自 ${ad.advertiserName}")
+                        }
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(Intent.EXTRA_TEXT, shareText)
+                            putExtra(Intent.EXTRA_SUBJECT, "分享广告")
+                        }
+                        context.startActivity(Intent.createChooser(intent, "分享到"))
+                    }
                 }
             }
         }
@@ -124,6 +148,16 @@ fun FeedScreen(
             viewModel.onEvent(FeedEvent.LoadMore)
         }
     }
+
+    // ── 曝光追踪 (Day 9) ──
+    val exposureTracker = remember { ExposureTracker() }
+    exposureTracker.Track(
+        lazyListState = listState,
+        ads = uiState.ads,
+        onExposed = { adId ->
+            viewModel.onEvent(FeedEvent.Expose(adId))
+        }
+    )
 
     // ── 主内容 ──
     Box(modifier = modifier.fillMaxSize()) {
@@ -174,6 +208,7 @@ fun FeedScreen(
                             // mutableStateMapOf 读取建立 snapshot 依赖 → 精确重组该 item
                             val liked = viewModel.likedAdIds[ad.id] ?: ad.isLiked
                             val collected = viewModel.collectedAdIds[ad.id] ?: ad.isCollected
+                            val aiContent = viewModel.aiContentMap[ad.id]
 
                             Column(
                                 modifier = Modifier
@@ -183,6 +218,7 @@ fun FeedScreen(
                                 when (ad) {
                                     is AdItem.LargeImageAd -> LargeImageCard(
                                         ad = ad.copy(isLiked = liked, isCollected = collected),
+                                        aiContent = aiContent,
                                         onLikeClick = { viewModel.onEvent(FeedEvent.ToggleLike(ad.id)) },
                                         onCollectClick = { viewModel.onEvent(FeedEvent.ToggleCollect(ad.id)) },
                                         onShareClick = { viewModel.onEvent(FeedEvent.Share(ad.id)) },
@@ -192,6 +228,7 @@ fun FeedScreen(
 
                                     is AdItem.SmallImageAd -> SmallImageCard(
                                         ad = ad.copy(isLiked = liked, isCollected = collected),
+                                        aiContent = aiContent,
                                         onLikeClick = { viewModel.onEvent(FeedEvent.ToggleLike(ad.id)) },
                                         onCollectClick = { viewModel.onEvent(FeedEvent.ToggleCollect(ad.id)) },
                                         onShareClick = { viewModel.onEvent(FeedEvent.Share(ad.id)) },
@@ -199,15 +236,27 @@ fun FeedScreen(
                                         onCardClick = { viewModel.onEvent(FeedEvent.CardClick(ad)) }
                                     )
 
-                                    is AdItem.VideoAd -> VideoCard(
-                                        ad = ad.copy(isLiked = liked, isCollected = collected),
-                                        onLikeClick = { viewModel.onEvent(FeedEvent.ToggleLike(ad.id)) },
-                                        onCollectClick = { viewModel.onEvent(FeedEvent.ToggleCollect(ad.id)) },
-                                        onShareClick = { viewModel.onEvent(FeedEvent.Share(ad.id)) },
-                                        onTagClick = { tag -> viewModel.onEvent(FeedEvent.FilterByTag(tag)) },
-                                        onCardClick = { viewModel.onEvent(FeedEvent.CardClick(ad)) },
-                                        onPlayClick = { /* TODO: Day 4 PlayerPool 播放 */ }
-                                    )
+                                    is AdItem.VideoAd -> {
+                                        // 查找列表中下一个视频的封面 URL（用于预加载）
+                                        val currentIndex = uiState.ads.indexOf(ad)
+                                        val nextVideoCover = uiState.ads
+                                            .drop(currentIndex + 1)
+                                            .firstOrNull { it is AdItem.VideoAd }
+                                            ?.let { (it as AdItem.VideoAd).coverImageUrl }
+
+                                        VideoCard(
+                                            ad = ad.copy(isLiked = liked, isCollected = collected),
+                                            aiContent = aiContent,
+                                            onLikeClick = { viewModel.onEvent(FeedEvent.ToggleLike(ad.id)) },
+                                            onCollectClick = { viewModel.onEvent(FeedEvent.ToggleCollect(ad.id)) },
+                                            onShareClick = { viewModel.onEvent(FeedEvent.Share(ad.id)) },
+                                            onTagClick = { tag -> viewModel.onEvent(FeedEvent.FilterByTag(tag)) },
+                                            onCardClick = { viewModel.onEvent(FeedEvent.CardClick(ad)) },
+                                            onPlayClick = { /* PlayerPool 播放由 VideoCard 内部管理 */ },
+                                            isScrollInProgress = isScrollInProgress,
+                                            nextVideoCoverUrl = nextVideoCover
+                                        )
+                                    }
                                 }
                             }
                         }

@@ -201,17 +201,39 @@ class AdRepository(
     // ═══════════════════════════════════════════════════════
 
     /**
-     * 更新广告的点赞/收藏状态（跨页面同步）
+     * 更新广告的点赞/收藏状态（跨页面同步 + 计数联动）
      *
-     * 更新内存缓存中的所有引用，确保详情页和信息流卡片状态一致。
+     * **架构说明**：
+     * ```
+     * ViewModel → AdRepository.updateInteraction()     ← 业务层入口（不变）
+     *              ├─ dataSource.updateInteraction()    ← Mock: 内存更新 | Remote: API 调用
+     *              └─ 同步本地 channelItems 缓存        ← 确保 FeedScreen 读取到最新值
+     * ```
+     * 接入真实服务端时，只需在 [RemoteDataSource] 中实现 API 调用，
+     * Repository 和 ViewModel 层无需任何改动。
+     *
+     * 更新流程：
+     * 1. 委托给 DataSource（Mock 直接修改缓存，Remote 调用 API）
+     * 2. DataSource 成功返回后，同步 Repository 本地缓存
+     * 3. Compose snapshot 系统检测到 AdItem 字段变化 → 自动重组 UI
      */
-    fun updateInteraction(adId: String, isLiked: Boolean? = null, isCollected: Boolean? = null) {
-        for ((_, items) in channelItems) {
-            items.find { it.id == adId }?.let { ad ->
-                isLiked?.let { ad.isLiked = it }
-                isCollected?.let { ad.isCollected = it }
+    suspend fun updateInteraction(
+        adId: String,
+        isLiked: Boolean? = null,
+        isCollected: Boolean? = null,
+        incrementShare: Boolean = false
+    ): Result<AdItem> {
+        val result = dataSource.updateInteraction(adId, isLiked, isCollected, incrementShare)
+        result.onSuccess { updatedAd ->
+            // 同步 Repository 本地缓存（确保 FeedScreen 和 DetailScreen 读取到最新值）
+            for ((_, items) in channelItems) {
+                val index = items.indexOfFirst { it.id == adId }
+                if (index >= 0) {
+                    items[index] = updatedAd
+                }
             }
         }
+        return result
     }
 
     /** 清空所有缓存 */
@@ -219,5 +241,143 @@ class AdRepository(
         channelItems.clear()
         channelPagination.clear()
         channelFilterTag.clear()
+        searchCache.clear()
+        searchPagination.clear()
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 搜索
+    // ═══════════════════════════════════════════════════════
+
+    /** 搜索缓存（key = query） */
+    private val searchCache = mutableMapOf<String, MutableList<AdItem>>()
+
+    /** 搜索分页状态（key = query） */
+    private val searchPagination = mutableMapOf<String, PaginationState>()
+
+    /**
+     * 跨频道关键词搜索广告
+     *
+     * 通过 DataSource 查询，对 Mock/Remote 透明。
+     *
+     * @param query 搜索关键词
+     * @param page 页码
+     * @param pageSize 每页条数
+     */
+    suspend fun searchAds(
+        query: String,
+        page: Int = 1,
+        pageSize: Int = 20
+    ): Result<AdPageResponse> {
+        val state = PaginationState(currentPage = page, pageSize = pageSize, loadState = LoadState.LOADING)
+        searchPagination[query] = state
+
+        val result = dataSource.searchAds(query, page, pageSize)
+
+        return result.fold(
+            onSuccess = { response ->
+                if (page == 1) {
+                    searchCache[query] = response.items.toMutableList()
+                } else {
+                    searchCache.getOrPut(query) { mutableListOf() }
+                        .addAll(response.items)
+                }
+                searchPagination[query] = state.copy(
+                    currentPage = response.page,
+                    hasMore = response.page < response.totalPages,
+                    loadState = if (response.page >= response.totalPages) LoadState.END else LoadState.IDLE
+                )
+                Result.success(response)
+            },
+            onFailure = { error ->
+                searchPagination[query] = state.copy(loadState = LoadState.ERROR)
+                Result.failure(error)
+            }
+        )
+    }
+
+    /**
+     * 搜索加载更多
+     */
+    suspend fun loadMoreSearchResults(
+        query: String,
+        pageSize: Int = 20
+    ): Result<AdPageResponse> {
+        val state = searchPagination[query] ?: PaginationState()
+        if (!state.hasMore) {
+            return Result.success(
+                AdPageResponse(page = state.currentPage, totalPages = state.currentPage, pageSize = pageSize, items = emptyList())
+            )
+        }
+
+        val nextPage = state.currentPage + 1
+        return searchAds(query, nextPage, pageSize)
+    }
+
+    /** 获取搜索缓存 */
+    fun getCachedSearchResults(query: String): List<AdItem> =
+        searchCache[query] ?: emptyList()
+
+    /** 获取搜索分页状态 */
+    fun getSearchPaginationState(query: String): PaginationState =
+        searchPagination[query] ?: PaginationState()
+
+    /** 获取全量广告（不做关键词过滤） */
+    suspend fun getAllAds(): Result<AdPageResponse> =
+        dataSource.getAllAds()
+
+    /** 获取热门搜索关键词 */
+    suspend fun getTrendingKeywords(): Result<List<String>> =
+        dataSource.getTrendingKeywords()
+
+    /** 输入联想建议 */
+    suspend fun getSearchSuggestions(
+        query: String,
+        limit: Int = 10
+    ): Result<List<String>> =
+        dataSource.getSearchSuggestions(query, limit)
+
+    // ═══════════════════════════════════════════════════════
+    // 曝光/点击统计
+    // ═══════════════════════════════════════════════════════
+
+    /**
+     * 递增广告曝光计数（去重由调用方保证——ExposureTracker 已去重）
+     *
+     * 更新 DataSource 后同步 Repository 本地缓存，确保 StatsScreen
+     * 读取到的 exposureCount 是最新值。
+     */
+    suspend fun incrementExposure(adId: String): Result<AdItem> {
+        val result = dataSource.incrementExposure(adId)
+        result.onSuccess { updatedAd ->
+            syncLocalCache(adId, updatedAd)
+        }
+        return result
+    }
+
+    /**
+     * 递增广告点击计数
+     */
+    suspend fun incrementClick(adId: String): Result<AdItem> {
+        val result = dataSource.incrementClick(adId)
+        result.onSuccess { updatedAd ->
+            syncLocalCache(adId, updatedAd)
+        }
+        return result
+    }
+
+    /**
+     * 同步 Repository 本地 channelItems 缓存
+     *
+     * 当 DataSource 更新广告后，同步到所有频道的缓存中，
+     * 确保 FeedScreen 和其他消费者读取到最新值。
+     */
+    private fun syncLocalCache(adId: String, updatedAd: AdItem) {
+        for ((_, items) in channelItems) {
+            val index = items.indexOfFirst { it.id == adId }
+            if (index >= 0) {
+                items[index] = updatedAd
+            }
+        }
     }
 }

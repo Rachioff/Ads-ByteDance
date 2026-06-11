@@ -19,7 +19,9 @@ data class FeedUiState(
     val ads: List<AdItem> = emptyList(),
     val loadState: LoadState = LoadState.IDLE,
     val activeFilterTag: String? = null,
-    val currentChannel: Channel = Channel.FEATURED
+    val currentChannel: Channel = Channel.FEATURED,
+    /** 每次互动操作（点赞/收藏/分享）递增，确保 Compose 检测到 uiState 结构变化并触发重组 */
+    val interactionVersion: Int = 0
 )
 
 /**
@@ -58,4 +60,7 @@ sealed class FeedEvent {
 
     /** 重试加载 */
     data object Retry : FeedEvent()
+
+    /** 广告曝光（Day 9 新增，由 ExposureTracker 触发） */
+    data class Expose(val adId: String) : FeedEvent()
 }

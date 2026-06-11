@@ -434,3 +434,1253 @@
 - **改动文件**：`feed/ui/card/VideoCard.kt`（4 处修改：import / 新增 isDragging / 同步循环守卫 / Slider 替换）
 
 ---
+
+## Day 5：详情页模块 + 导航 + 跨页状态同步 + 分享
+
+### 完成内容
+
+#### 1. 详情页状态模型（detail/model/DetailUiState.kt）
+
+- `DetailUiState(ad, loadState, errorMessage)` — 详情页 UI 状态数据类
+- `DetailEvent` — 用户事件密封类（ToggleLike / ToggleCollect / Share / Back / Retry）
+- `DetailOneTimeEvent` — 一次性事件密封类（ShowToast / ShowShareSheet / NavigateBack），通过 `MutableSharedFlow` 发送确保只消费一次
+
+#### 2. DetailViewModel（detail/viewmodel/DetailViewModel.kt）
+
+- **构造参数**：`adId: String`（Koin parameter 注入）+ `repository: AdRepository`
+- **数据加载**：`init` 中通过 `repository.getAdById(adId)` 异步加载广告数据（IO 线程）
+- **互动状态管理**：`likedAdIds` / `collectedAdIds`: `mutableStateMapOf<String, Boolean>`（与 FeedViewModel 模式一致）
+- **跨页面状态同步**：`toggleLike()` / `toggleCollect()` 调用 `repository.updateInteraction()` 更新内存缓存中的 `isLiked`/`isCollected` 字段
+- **分享**：构建分享文案（标题 + 描述 + 广告主）→ 发送 `ShowShareSheet` 一次性事件
+
+#### 3. DetailScreen 主 Composable（detail/ui/DetailScreen.kt）
+
+**整体布局**（Scaffold 三段式）：
+```
+Scaffold
+├── TopAppBar: 返回按钮 + 广告主名称
+├── Content (可滚动 Column)
+│   ├── 媒体区（ImageDetailMedia / VideoDetailMedia）
+│   ├── 广告标题（headlineLarge + Bold）
+│   ├── 完整描述（不限行数，全面展示）
+│   ├── 广告主信息卡片（44dp 头像 + 名称 + "广告主"蓝色徽章 + 频道名）
+│   ├── AI 摘要卡片（aiSummary 非空时，渐变背景 + AutoAwesome 图标）
+│   └── 智能标签行（FlowRow，复用 TagChips）
+└── BottomBar: DetailInteractions 增强互动栏
+```
+
+**媒体区分发**：
+- `ImageDetailMedia`（图文）：`AsyncImage` 3:2 比例 + 底部渐变遮罩
+- `VideoDetailMedia`（视频）：
+  - 进入时 `PlayerPool.acquire()` 获取播放器，默认有声（`volume=1f`）
+  - `useController = true`：完整的 ExoPlayer 控制条
+  - 离开时 `DisposableEffect.onDispose` → `playerPool.release()` 归还池
+  - 独立的静音按钮 + 缓冲 loading + 错误态 + 重试
+
+**状态分发**：LOADING → `LoadingShimmer` / ERROR → `ErrorState` / IDLE → 完整内容
+
+#### 4. 增强互动按钮（detail/ui/DetailInteractions.kt）
+
+比卡片版 `CardInteractions` 更突出（28dp 图标、完整计数、粒子动效）：
+
+- **点赞爱心扩散**（`HeartBurstParticles`）：
+  - 触发条件：`isLiked` 从 false → true 时
+  - 6 个小爱心从中心向四周扩散（cos/sin 角度均匀分布，20-60dp 随机距离）
+  - 4 个 `Animatable` 并行驱动：offsetX / offsetY / scale（0.6→1.4）/ alpha（1.0→0.0）
+
+- **收藏弹簧缩放**：`animateFloatAsState(spring(dampingRatio=0.3f))`，比 CardInteractions 更明显弹性
+
+- **分享按钮**：`Icons.Filled.Share` 图标 + 完整计数（不缩写）
+
+#### 5. 导航架构改造（MainActivity.kt 重写）
+
+- 引入 **Navigation Compose NavHost** 管理路由：
+  ```
+  NavHost(startDestination = "home")
+    ├── composable("home")                  → HomeScreen(onNavigateToDetail)
+    └── composable("detail/{adId}")         → DetailScreen(adId, onBack)
+  ```
+- `adId` 通过 URL path 参数传递（`navArgument("adId") { type = NavType.StringType }`）
+- 返回栈管理：`popBackStack()` 返回，HomeScreen 的 `LazyListState` 天然保持滚动位置
+
+**导航回调链**：
+```
+FeedScreen.onCardClick → FeedViewModel → SharedFlow → FeedScreen 收集
+  → onNavigateToDetail(adId) → HomeScreen 回调 → navController.navigate("detail/$adId")
+```
+
+#### 6. 分享功能实现
+
+两处均可触发系统分享（FeedScreen / DetailScreen），通过 `Intent.ACTION_SEND` + `createChooser`：
+```
+{广告标题}
+{广告描述}
+— 来自 {广告主名称}
+```
+
+#### 7. 组件复用与解耦
+
+| 详情页使用 | 来源 |
+|---|---|
+| `RowWithAvatar` | `feed.ui.card` |
+| `TagChips` | `feed.ui.card.CardComponents` |
+| `LoadingShimmer` / `ErrorState` | `feed.ui.component.FeedStates` |
+| `VideoPlayer` | `player.ui.VideoPlayer` |
+| `PlayerPool` | `player.pool.PlayerPool` (Koin) |
+| `AdRepository.getAdById()` / `updateInteraction()` | `data.repository.AdRepository` |
+
+#### 8. DI 注册（ViewModelModule.kt）
+
+- 激活 `DetailViewModel` 的 Koin 声明：`viewModel { (adId: String) -> DetailViewModel(repository = get(), adId = adId) }`
+- Compose 端通过 `koinViewModel(key = "detail_$adId", parameters = { parametersOf(adId) })` 获取
+
+### 遇到的问题与解决
+
+1. **Bookmark 图标路径错误**：Material Icons 中 `Bookmark` 和 `BookmarkBorder` 位于 `Icons.Filled` / `Icons.Outlined`（非 `AutoMirrored`），修正 import 和引用。
+2. **`launch` 无法解析**：`kotlinx.coroutines.launch` 是 `CoroutineScope` 的扩展函数，FQN 引用不合法。修正为 `import kotlinx.coroutines.launch` + 直接使用 `launch {}`。
+3. **`aiSummary` smart cast 失败**：`ad.aiSummary` 是 sealed class 的抽象属性（有 open getter），Kotlin 编译器无法 smart cast。修正：先赋值到局部变量 `val aiSummary = ad.aiSummary`。
+4. **未使用 import 清理**：移除 DetailScreen 中未使用的 `horizontalScroll`、`AdUnits`、`PlayArrow` 等 import。
+
+### 学到的内容
+
+- Navigation Compose 的 `navArgument` + `NavType` 提供类型安全的路由参数传递
+- `NavBackStackEntry` 级别的 ViewModel 生命周期管理：HomeScreen 在 detail 弹出后未被销毁，状态完整保留
+- `mutableStateMapOf` 的跨页面一致性：FeedScreen 和 DetailScreen 各自使用独立的 map 实例，但通过共同的 Repository 内存缓存实现状态同步——Repository 是唯一的"真相源"
+- `Animatable` vs `animateFloatAsState`：需要并行多个动画时用 `Animatable` + `launch {}`，简单单属性用 `animateFloatAsState`
+- Kotlin sealed class 的抽象属性无法被 smart cast（因为 getter 可被覆盖），必须赋值到局部 val
+- Material Icons 分类：`Bookmark` 不是镜像图标，属于 `Filled`/`Outlined`
+
+### 设计决策记录
+
+| 决策项 | 内容 |
+|--------|------|
+| 导航框架 | 采用 Navigation Compose，利用 `NavBackStackEntry` 的 ViewModel 作用域 |
+| 视频跨页面复用 | 简化方案：详情页独立 acquire/release（PlayerPool 确保复用） |
+| 底部互动栏 | 独立组件 `DetailInteractions`（更大的图标 + 完整计数 + 爱心粒子动效） |
+| 标签点击 | 详情页中标签仅展示不可点击过滤，避免与 feed 过滤状态歧义 |
+| 图片轮播 | 数据模型仅单图，UI 预留 Box 结构，后续可扩展 `HorizontalPager` |
+
+### 文档更新
+
+- `struct.md`：更新 detail/ 目录结构为 4 个实际文件
+- `docs/daily-report.md`：Day 5 日报
+
+---
+
+## Day 6：AI 增强 — 摘要/标签生成 + 三级缓存 + UI 展示
+
+### 完成内容
+
+#### 1. AI API 网络层（ai/api/AiApiService.kt + NetworkConfig 扩展）
+
+- **AiApiService**：OpenAI 兼容的 Chat Completions Retrofit 接口
+  - `POST v1/chat/completions` — 支持 OpenAI / Qwen / DeepSeek 等兼容 API
+  - 请求/响应模型复用 Day 2 已定义的 `AiRequest` / `AiResponse`
+- **NetworkConfig 扩展**：
+  - `createAiRetrofit()` — 独立的 Retrofit 实例 + 60s 长超时 + `authInterceptor()` 自动注入 `Authorization: Bearer <key>`
+  - `getAiBaseUrl()` / `getAiApiKey()` — 从 BuildConfig 读取（由 local.properties 注入）
+- **AppModule** 注册：`aiRetrofit`（`named` qualifier）+ `AiApiService`
+
+#### 2. Prompt 构造器（ai/api/AiPromptBuilder.kt）
+
+- **System Prompt**：角色设定（广告分析助手）+ 输出约束（严格 JSON + summarize < 80 字 + 3-5 标签 + 4 类别枚举）
+- **User Message 模板**：广告标题 / 描述 / 广告主 / 类型 → 格式化为 prompt
+- **搜索意图解析 Prompt**（`buildSearchMessages`）：为 Day 7 对话式搜索预留
+
+#### 3. JSON 响应解析 + 校验 + 降级（ai/api/AiResponseParser.kt）
+
+- **多格式容错**：
+  - 直接 JSON
+  - markdown 代码块包裹（```json...```）
+  - 前后有说明文字（提取首 `{` ～ 末 `}`）
+- **字段校验**：
+  - summary 缺失 → 尝试中文 key（"摘要"）→ 仍失败则解析失败
+  - tags 缺失 / category 非法 → 默认 `CATEGORY`
+  - tags 最多取 5 个
+- **降级静态内容**：
+  - `fallbackSummary(description)`：描述前 80 字
+  - `fallbackTags(existingTags)`：复用 Mock 数据中的静态标签
+
+#### 4. AI 三级缓存（ai/cache/AiCacheManager.kt）
+
+- **Level 1 — 内存 LRU**：`LinkedHashMap(accessOrder=true, maxSize=50)`，线程安全（`synchronized`）
+- **Level 2 — Room 磁盘缓存**：`AiCacheDao.getValidCache(adId)`（7 天过期），命中后回填内存
+- **Level 3 — 网络 API**：由 `AiContentGenerator` 调用，成功后写入 L1 + L2
+- **批量查询**：`getCachedBatch(adIds)` 先查内存再批量查 Room
+- **维护方法**：`cleanExpired()`（启动时在 AdsApplication 调用）、`clearMemory()`、`clearAll()`
+
+#### 5. AI 内容生成器（ai/api/AiContentGenerator.kt）
+
+- **编排流程**：`generate(ad)` → 查缓存 → 调用 API → 解析 → 存储 → 返回（失败降级）
+- **批量生成**：`generateBatch(ads, onProgress)` — 串行调用（避免 API 限流），单条失败不影响其他
+- **强制刷新**：`refresh(ad)` — 忽略缓存，重新调用 API
+- **线程安全**：所有 I/O 在 `Dispatchers.IO` 执行
+
+#### 6. ViewModel + UI 集成
+
+**FeedViewModel 变更**：
+- 新增 `aiContentGenerator` 构造参数（Koin 注入）
+- 新增 `aiContentMap = mutableStateMapOf<String, AiGeneratedContent>()`（Compose snapshot map，精确重组）
+- `loadFirstPage()` / `refresh()` / `loadMore()` 成功后异步调用 `generateAiContent()`
+- `generateAiContent()` 完成后写入 `aiContentMap` → 触发卡片局部重组
+
+**DetailViewModel 变更**：
+- 新增 `aiContentGenerator` 构造参数 + `aiContentMap`
+- `loadAd()` 成功后异步调用 `generateAiContent()`
+
+**3 种卡片 UI 增强**：
+- 所有卡片新增 `aiContent: AiGeneratedContent?` 参数
+- 新增 `AiSummaryLabel` Composable（蓝色渐变背景 + AutoAwesome 图标 + 摘要文字）
+- 显示优先级：AI 生成摘要 > `ad.aiSummary` 静态降级 > 不显示
+
+**详情页 AI 增强**：
+- `AiSummaryCard` 新增 `tags` 参数：AI 生成的标签在摘要卡片内以 `TagChips` 展示
+- `DetailContent` 接受 `aiContent` 参数传递
+
+**DI 变更**：
+- `ViewModelModule`：FeedViewModel / DetailViewModel 的 Koin 声明新增 `aiContentGenerator = get()` 参数
+- `AppModule`：注册 `AiCacheManager` + `AiContentGenerator` 作为全局单例
+
+#### 7. 启动时缓存清理
+
+- `AdsApplication.onCreate()` 新增 `cleanExpiredAiCache()`：后台 IO 线程清理 Room 中过期的 AI 缓存
+
+### 架构设计要点
+
+#### AI 数据流
+
+```
+┌──────────────────────────────────────────────────┐
+│  卡片 / 详情页 Composable                         │
+│    读取 aiContentMap[adId] → 建立 snapshot 依赖    │
+└──────────────────┬───────────────────────────────┘
+                   │ 状态观察
+┌──────────────────▼───────────────────────────────┐
+│  FeedViewModel / DetailViewModel                 │
+│    loadFirstPage → generateAiContent(ads)         │
+│    完成后 → aiContentMap[adId] = AiGeneratedContent│
+└──────────────────┬───────────────────────────────┘
+                   │ 业务调度
+┌──────────────────▼───────────────────────────────┐
+│  AiContentGenerator (编排层)                      │
+│    generate(ad) → generateBatch(ads)             │
+│    ├─ cacheManager.getCached(adId)  ← 缓存命中    │
+│    ├─ fetchFromApi(ad)             ← API 调用     │
+│    └─ buildFallbackContent(ad)     ← 降级兜底    │
+└──────────────────┬───────────────────────────────┘
+                   │ 三级缓存
+┌──────────────────▼───────────────────────────────┐
+│  AiCacheManager                                  │
+│    L1: LinkedHashMap(accessOrder, max 50)        │
+│    L2: Room AiCacheDao (7天过期)                  │
+│    L3: (由 AiContentGenerator 调用 API)           │
+└──────────────────────────────────────────────────┘
+```
+
+#### 关键设计决策
+
+| 决策项 | 内容 | 理由 |
+|--------|------|------|
+| AI 内容存储策略 | `mutableStateMapOf` 独立于 AdItem 存储 | AdItem.aiSummary 为 `val`（不可变），AI 内容通过独立的 Compose snapshot map 追踪，与 likedAdIds/collectedAdIds 模式一致，确保精确重组 |
+| API 并发策略 | 串行调用（`generateBatch` 逐条） | 避免触发免费 API 的速率限制（如 Qwen 免费版 QPS 限制） |
+| 降级策略 | 解析失败 → 描述前 80 字 + 静态标签 | 即使 AI API 完全不可用，UI 也不会空白 |
+| AI Retrofit 超时 | 60s 读取超时（vs 广告 API 的 15s） | 大模型生成耗时较长；通过独立的 OkHttpClient 实例隔离 |
+| 认证方式 | OkHttp Interceptor 注入 Bearer Token | 对 Retrofit 接口透明，API Key 仅在 `local.properties` 配置（不提交 Git） |
+
+### 遇到的问题与解决
+
+无新增编译问题。代码一次性编译通过（修复 3 个初始化错误后）。
+
+### 学到的内容
+
+- Koin 的 `named()` qualifier：同一类型（`Retrofit`）的多实例注入方案，通过 `get<Retrofit>(named("aiRetrofit"))` 精确选择
+- `LinkedHashMap(accessOrder=true)` 实现简单 LRU 缓存：每次 `get`/`put` 将条目移到链表尾部，`removeEldestEntry` 在 put 后自动剔除最老条目
+- Kotlin `const val` 的限制：multiline raw string 不能作为 `const val`（编译器要求编译期常量）
+- AI 响应的鲁棒解析：大模型返回值不可靠（可能含 markdown 包装、中文 key、非法枚举值），解析器需要多层容错
+- OkHttp `newBuilder()` 创建独立实例：基于全局 OkHttpClient 派生 AI 专用实例（共享连接池但独立超时），避免创建多个连接池
+
+### 文档更新
+
+- `struct.md`：新增 AI 模块 4 个文件路径
+- `docs/daily-report.md`：Day 6 日报
+
+---
+
+## Day 7：对话式搜索 — Chat Bot 微服务对接 + 本地匹配引擎 + 聊天气泡 UI
+
+### 完成内容
+
+#### 1. 设备级用户标识（common/util/SessionManager.kt）
+
+- SharedPreferences 持久化 UUID，首次启动生成，卸载重装重置
+- `val userId` 懒加载属性，通过 `X-User-Id` 请求头传递给微服务
+- `regenerateUserId()` 调试方法（会丢失历史 session 数据）
+
+#### 2. 聊天数据模型（search/model/SearchModels.kt + SearchUiState.kt）
+
+**SearchModels.kt — 网络层 DTO**：
+- `ChatApiResponse<T>` — 微服务通用响应包装 `{ code, message, data }`
+- `SessionInfo` / `CreateSessionRequest` — Session 创建
+- `SendMessageRequest` / `ChatMessageDto` / `SendMessageData` — 消息发送/接收
+- `MessageHistoryData` — 对话历史
+- `ChatUiMessage` — UI 层消费的消息模型（role + content + ads + isFallback）
+
+**SearchUiState.kt — UI 状态**：
+- `messages: List<ChatUiMessage>` — 对话消息列表
+- `sessionId: String?` — 当前 session（null = 服务不可用）
+- `isServiceAvailable: Boolean` — 降级开关
+- `inputText` / `isLoading` / `errorMessage`
+
+#### 3. Chat Bot 微服务 Retrofit 接口（ai/api/ChatBotService.kt）
+
+```
+POST   /api/sessions                  → createSession()
+POST   /api/sessions/{id}/messages    → sendMessage()       ← 核心
+GET    /api/sessions/{id}/messages    → getHistory()
+DELETE /api/sessions/{id}             → deleteSession()
+```
+
+- `X-User-Id` 头通过 OkHttp Interceptor 自动注入（来自 SessionManager.userId）
+- 所有返回类型使用 `Response<ChatApiResponse<T>>` 处理成功/错误码
+
+#### 4. NetworkConfig + AppModule 扩展（Chat Bot 网络层）
+
+**NetworkConfig.kt 新增**：
+- `getChatBotBaseUrl()` — 从 `BuildConfig.CHATBOT_SERVICE_URL` 读取
+- `createChatBotRetrofit(client, userId)` — 独立 Retrofit 实例 + `userIdInterceptor()`
+- `userIdInterceptor(userId)` — 注入 `X-User-Id` 请求头
+
+**build.gradle.kts 新增**：
+- `buildConfigField("CHATBOT_SERVICE_URL", ...)` — 从 `local.properties` 注入 `chatbot.service.url`
+
+**AppModule.kt 新增**：
+- `single<SessionManager>` — 设备 UUID 管理器
+- `single<Retrofit>(named("chatbotRetrofit"))` — 微服务 Retrofit 实例
+- `single<ChatBotService>` — 微服务 API 接口
+- `single<AdMatchingEngine>` — 本地匹配引擎
+
+#### 5. AdMatchingEngine 本地匹配引擎（search/engine/AdMatchingEngine.kt）
+
+**三条匹配路径**：
+
+| 路径 | 方法 | 触发场景 |
+|------|------|---------|
+| **AI 意图匹配** | `matchWithIntent(ads, intent)` | 微服务返回 `AiIntentResult` → 转换为 `SearchCriteria` → `match()` |
+| **结构化匹配** | `match(ads, criteria)` | 直接传入 `SearchCriteria`（如标签过滤） |
+| **关键词降级** | `keywordSearch(ads, query)` | 微服务不可用时，分词后在 title/description/tag 中子串匹配 |
+
+**评分规则**：
+```
+标签精确匹配       → +3.0 / 个
+关键词命中标题     → +2.0 / 个  (降级模式: +3.0)
+关键词命中描述     → +1.0 / 个  (降级模式: +1.5)
+受众标签匹配       → +2.0 / 个
+标签名称命中关键词 → +2.0 / 个  (仅降级模式)
+```
+
+- 分词策略：按空格 + 中英文标点拆分，过滤单字（< 2 字符）
+- 结果按 `score` 降序排列，score = 0 的广告不返回
+- `AdMatchResult(ad, score)` 包装
+
+#### 6. SearchViewModel（search/viewmodel/SearchViewModel.kt）
+
+**核心流程**：
+
+```
+init → createSession()
+  ├─ 成功 → isServiceAvailable=true, sessionId=xxx
+  └─ 失败 → isServiceAvailable=false（后续走降级）
+
+sendMessage(query):
+  ├─ 添加用户气泡到 messages
+  ├─ isServiceAvailable=true:
+  │   ├─ POST /api/sessions/{id}/messages
+  │   ├─ 成功 → 提取 intent → AdMatchingEngine.matchWithIntent()
+  │   │         → 添加 AI 气泡（文本 + 广告卡片）
+  │   └─ 失败 → AdMatchingEngine.keywordSearch() 降级
+  └─ isServiceAvailable=false:
+      └─ AdMatchingEngine.keywordSearch() 直接降级
+
+clearConversation():
+  ├─ DELETE /api/sessions/{id}
+  ├─ POST /api/sessions（新 session）
+  └─ 清空 messages
+```
+
+**数据获取**：
+- `getAllAds()` — 遍历 3 个频道，优先使用 Repository 内存缓存
+- 缓存为空时异步加载首页数据（确保匹配引擎有数据可用）
+- 按 `adId` 去重（同一广告可能出现在多个频道）
+
+**降级策略**：
+- 微服务不可用时 AI 气泡显示"搜索服务暂不可用，以下是本地关键词匹配结果"
+- `ChatUiMessage.isFallback = true` 标记降级消息
+- UI 在气泡内显示 "⚠ 本地匹配结果" 小字提示
+
+#### 7. SearchScreen 聊天气泡 UI（search/ui/SearchScreen.kt）
+
+**页面布局**：
+
+```
+Scaffold
+├── TopAppBar: ← 返回 | "AI 搜索" | 清空按钮
+├── Content:
+│   ├── 欢迎态（无消息时）
+│   │   ├── 服务可用：AutoAwesome 图标 + 使用引导文案
+│   │   └── 服务不可用：SearchOff 图标 + 本地模式提示
+│   └── 对话态：LazyColumn
+│       ├── 用户气泡：右对齐，primary 蓝色背景，白色文字
+│       ├── AI 气泡：左对齐，surfaceVariant 背景
+│       │   ├── AI 文本
+│       │   ├── 降级标记（isFallback 时显示）
+│       │   └── 嵌入广告卡片（标题 + 缩略图 + 广告主 → 可点击到详情页）
+│       └── 加载气泡："思考中..." + spinner
+└── BottomBar: 圆角 TextField + Send 图标按钮
+```
+
+**Composable 组件树**：
+- `WelcomeCard` — 欢迎卡片（服务可用/不可用两种状态）
+- `ChatBubble` — 聊天气泡分发（USER / ASSISTANT）
+- `EmbeddedAdCard` — 对话流中嵌入的简版广告卡片（56dp 缩略图 + 标题 + 广告主 + 箭头）
+- `AiAvatar` / `UserAvatar` — 头像（32dp 圆形）
+- `LoadingBubble` — AI 思考中动画
+- `SearchInputBar` — 底部输入栏（圆角 TextField + 发送按钮）
+
+**交互细节**：
+- 新消息到达时 LazyColumn 自动滚动到底部（`LaunchedEffect(messages.size)`）
+- 发送后清空输入框 → 显示加载气泡 → AI 回复到达后替换
+- 点击嵌入广告卡片 → `onNavigateToDetail(adId)` → 导航到详情页
+- 清空按钮仅在 `messages.isNotEmpty()` 时显示
+
+#### 8. 搜索入口集成
+
+**HomeScreen.kt**：
+- TopAppBar 新增搜索图标（`Icons.Filled.Search`）
+- 新增 `onNavigateToSearch` 回调参数
+
+**MainActivity.kt**：
+- NavHost 新增 `composable("search")` 路由
+- `SearchScreen(onBack, onNavigateToDetail)` 完整连线
+- 路由表更新：`home → detail/{adId} → search`
+
+**ViewModelModule.kt**：
+- 注册 `SearchViewModel(chatBotService, matchingEngine, repository)`
+
+### 架构设计要点
+
+#### 整体数据流
+
+```
+┌───────────────────────────────────────────────────────────┐
+│  SearchScreen (Compose UI)                                 │
+│    观察 SearchUiState → 渲染聊天气泡 + 广告卡片              │
+└──────────────────────┬────────────────────────────────────┘
+                       │ StateFlow<SearchUiState>
+┌──────────────────────▼────────────────────────────────────┐
+│  SearchViewModel                                           │
+│    sendMessage → 路径选择:                                  │
+│    ├─ 正常路径: ChatBotService → AiIntentResult            │
+│    │            → AdMatchingEngine.matchWithIntent()       │
+│    └─ 降级路径: AdMatchingEngine.keywordSearch()           │
+└──────────────────────┬────────────────────────────────────┘
+                       │
+        ┌──────────────┼──────────────┐
+        ▼              ▼              ▼
+┌──────────────┐ ┌───────────┐ ┌──────────────┐
+│ChatBotService│ │AdMatching │ │ AdRepository │
+│(微服务 API)   │ │Engine     │ │(本地广告数据) │
+└──────┬───────┘ └───────────┘ └──────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────┐
+│  Chat Bot 微服务 (localhost:8080)             │
+│  ├─ /v1/chat/completions (AI 摘要/标签)       │
+│  └─ /api/sessions/* (对话搜索)                │
+└──────────────────────────────────────────────┘
+```
+
+#### 关键设计决策
+
+| 决策项 | 内容 | 理由 |
+|--------|------|------|
+| 广告匹配位置 | 客户端本地执行 AdMatchingEngine | 本项目数据量小（30条/频道），客户端匹配无延迟；不依赖微服务端维护广告数据副本（chatbot-api.md §8.2.2 模式 B） |
+| Session 管理 | 客户端仅维护 sessionId | 对话历史由微服务端存储（多轮上下文需服务端维护），客户端保存轻量 sessionId 用于后续消息发送 |
+| 降级策略 | 微服务不可用 → 本地关键词搜索 | 用户体验不中断：即使微服务未启动，仍可通过关键词搜索获得结果 |
+| ChatBot Retrofit 独立性 | 独立 Retrofit 实例（独立 BaseUrl + X-User-Id 拦截器） | 与 AI 摘要 API / 广告 API 隔离——微服务故障不影响其他功能 |
+| 搜索页面广告数据来源 | AdRepository 三频道缓存 + 按需加载 | 避免搜索时无数据匹配；优先复用内存缓存，减少 IO |
+| 嵌入广告卡片 | 简化版 Composable（56dp 缩略图 + 标题 + 广告主） | 对话流中不宜展示完整 feed 卡片（太大打断阅读流），简版卡片提供足够信息 + 点击跳转详情 |
+
+### 遇到的问题与解决
+
+1. **JVM 签名冲突（`getUserId()`）**：`val userId` 属性自动生成 `getUserId()` getter，与手动定义的 `fun getUserId()` 方法签名相同。删除手动方法，仅保留属性访问。
+
+2. **StateFlow 在 Compose 中的访问方式**：`viewModel.uiState` 返回 `StateFlow<SearchUiState>`，在 Composable 中直接访问 `.messages` 等属性会编译失败。使用 `by viewModel.uiState.collectAsState()` 将 StateFlow 转换为 Compose State。
+
+3. **struct.md 文件缩进格式**：struct.md 使用 tab + 树状字符的混合缩进，Edit 工具难以精确匹配。使用 PowerShell 脚本做内容替换。
+
+### 学到的内容
+
+- **Kotlinx Serialization 泛型处理**：`ChatApiResponse<T>` 在 Retrofit 中通过 `Response<ChatApiResponse<SessionInfo>>` 指定具体类型参数，Retrofit + Kotlinx Serialization converter 能在运行时正确解析参数化类型。
+- **StateFlow → Compose State 桥接**：`collectAsState()` 是 Compose 中观察 StateFlow 的标准方式，将响应式流转换为 Compose snapshot 系统可追踪的 State 对象。
+- **OkHttp Interceptor 链设计**：不同 API 通过不同的 Interceptor 注入不同的认证头（AI：`Authorization: Bearer`；ChatBot：`X-User-Id`），共享底层连接池但独立认证逻辑。
+- **降级设计的层次化**：Day 7 实现了"微服务不可用 → 本地关键词搜索"的降级路径，加上 Day 6 的"AI API 失败 → 静态内容降级"，形成了 AI 功能的多层降级体系。
+- **LazyColumn 在聊天场景的使用**：通过 `LaunchedEffect(messages.size)` 监听消息数量变化并自动滚动到底部，配合 `key = { it.id }` 确保消息气泡不重复渲染。
+
+### 文档更新
+
+- `struct.md`：新增 Day 7 全部 8 个文件路径
+- `docs/daily-report.md`：Day 7 日报
+- `app/build.gradle.kts`：新增 `CHATBOT_SERVICE_URL` BuildConfig 字段
+
+---
+
+## Day 7 补充：聊天历史内存缓存 + 应用启动预加载 + 搜索结果恢复
+
+### 背景问题
+
+1. **每次进入 ChatScreen 都重新加载历史** — ViewModel 随 Compose 导航重建时总是发起 `GET /api/sessions/{id}/messages` 网络请求
+2. **搜索匹配的广告结果在重载历史时消失** — 广告匹配在客户端执行（Mode B），服务端 `ads` 字段为空；`loadHistory()` 直接使用 `dto.ads ?: emptyList()` 导致广告卡片丢失
+3. **冷启动无预加载** — 用户退出应用重进时，必须等进入 ChatScreen 才开始加载历史
+
+### 完成内容
+
+#### 1. ChatMemoryCache（ai/chat/cache/ChatMemoryCache.kt）
+
+- Koin `single`，纯内存缓存（不持久化到 Room）
+- 线程安全设计：所有可变操作使用 `@Synchronized`，`getMessages()` 返回防御性拷贝
+- 三个核心操作：`setMessages`（整批写入）、`addMessage`（单条追加）、`clear`（清空 + 标记未加载）
+- `isWarm()` 标志区分"缓存有数据"和"已清空/未初始化"
+
+#### 2. ChatPreloader（ai/chat/preload/ChatPreloader.kt）
+
+- 应用启动时在 `Dispatchers.IO` 后台预加载历史
+- 幂等设计：`cache.isWarm()` 时立即返回
+- **广告恢复核心逻辑**：利用服务端持久化的 `AiIntentResult`，通过 `AdMatchingEngine.matchWithIntent()` 重新执行本地匹配，恢复之前展示的广告卡片
+- 失败静默：网络不可用时由 ChatViewModel 在用户进入时走正常 loadHistory 路径
+
+#### 3. ChatViewModel 修改
+
+- **init**：优先检查 `chatCache.isWarm()` → 命中则直接展示（无加载动画、无网络请求）
+- **loadHistory**：提取 `rematchDtoToUiMessage()` 方法，加载全量广告后批量重匹配 + 写入缓存
+- **sendMessage**：用户消息 + AI 回复均同步写入 `chatCache` 保持一致性
+- **clearConversation**：调用 `chatCache.clear()` 防止下次进入读到已删除数据
+
+#### 4. AdsApplication 启动预加载
+
+- 新增 `preloadChatHistory()` 方法，复用 `applicationScope`（IO 线程）
+- 在 `cleanExpiredAiCache()` 之后调用
+- 使用 `GlobalContext.get().get()` 获取 Koin 管理的 `ChatPreloader`
+
+#### 5. DI 模块更新
+
+- `AppModule.kt`：注册 `ChatMemoryCache`（零依赖单例）+ `ChatPreloader`（5 依赖单例）
+- `ViewModelModule.kt`：ChatViewModel 构造增加 `chatCache = get()`
+
+### 数据流
+
+```
+App Start
+  └─ preloadChatHistory() [IO]
+       └─ ChatPreloader.preload()
+            ├─ GET /api/sessions/{id}/messages
+            ├─ getAllAds() → matchWithIntent() 重匹配 → 恢复广告卡片
+            └─ cache.setMessages() → cache warm
+
+User → ChatScreen
+  └─ ChatViewModel.init()
+       ├─ cache.isWarm()? yes → 直接展示，无网络请求  ← 关键优化
+       └─ no → loadHistory() → rematchDtoToUiMessage() → cache.setMessages()
+
+User sends message
+  └─ sendMessage()
+       ├─ cache.addMessage(userMsg)
+       ├─ POST → matchWithIntent()
+       └─ cache.addMessage(aiMsg)  ← 实时同步
+
+User clears conversation
+  └─ clearConversation()
+       ├─ cache.clear()  ← 防止脏读
+       ├─ DELETE session
+       └─ createSession()
+```
+
+### 关键设计决策
+
+| 决策项 | 内容 | 理由 |
+|--------|------|------|
+| 缓存持久化策略 | 纯内存（不写 Room） | 用户明确要求"不用永久存储，只用存在内存即可"；聊天历史由服务端持久化，本地缓存仅加速热启动 |
+| 广告恢复策略 | 利用服务端 `intent` 字段本地重匹配 | Mode B 下服务端不存储完整广告列表，但 LLM 解析出的 `AiIntentResult` 在服务端持久化；重匹配保证了广告卡片不丢失 |
+| 线程安全方案 | `@Synchronized` 方法级锁 | 操作轻量（消息列表替换/追加），`@Synchronized` 比 `Mutex` 开销更小，代码更简洁 |
+| 预加载失败处理 | 静默跳过 | ViewModel 在用户进入 ChatScreen 时走正常 loadHistory 路径做兜底 |
+| 重复预加载防护 | `cache.isWarm()` 幂等检查 | ChatPreloader.preload() 和 ChatViewModel.init 的缓存路径互不干扰 |
+
+### 文件变更
+
+| Action | File | 
+|--------|------|
+| CREATE | `ai/chat/cache/ChatMemoryCache.kt` |
+| CREATE | `ai/chat/preload/ChatPreloader.kt` |
+| MODIFY | `ai/chat/viewmodel/ChatViewModel.kt` — 缓存优先 + rematchDtoToUiMessage + 同步 |
+| MODIFY | `di/AppModule.kt` — 注册新单例 |
+| MODIFY | `di/ViewModelModule.kt` — 注入 chatCache |
+| MODIFY | `AdsApplication.kt` — 启动预加载 |
+| MODIFY | `struct.md` — 新增 2 个文件路径 |
+
+### 文档更新
+
+- `struct.md`：新增 `chat/cache/` 和 `chat/preload/` 目录
+- `docs/daily-report.md`：Day 7 补充
+
+---
+
+## Day 8：搜索功能增强 — 输入按钮 + 空态修复 + 返回逻辑修复 + 搜索历史
+
+### 问题诊断
+
+1. **搜索结果为空时无提示**：`showResults` 条件 `results.isNotEmpty() || LOADING || ERROR` 导致搜索结果为空且 loadState 回到 IDLE 时整个 ResultsSection 不渲染，空态 UI 永远不会显示
+2. **返回逻辑错误**：`onBack` 直接 `popBackStack()`，从搜索结果页返回直接回到主页，而非回到搜索初始页
+3. **缺少显式的搜索提交按钮**：只能通过键盘 IME 提交搜索，不符合中文输入习惯
+4. **缺少搜索历史**：缺少类似 Apple Music 的搜索历史功能（记录用户点进详情的广告，而非搜索关键词）
+
+### 完成内容
+
+#### 1. SearchHistoryManager（search/data/SearchHistoryManager.kt）— 新建
+
+- **JSON 文件持久化**：使用 `kotlinx.serialization` 序列化 `List<AdItem>` 到 `filesDir/search_history.json`
+- **去重 + 置顶**：同一广告重复点击时移到列表顶部
+- **上限 50 条**：超过则删除最旧的记录
+- **线程安全**：`Mutex` 保护写操作，文件 I/O 在 `Dispatchers.IO` 上执行
+- **StateFlow 暴露**：ViewModel 可观察历史列表变化并驱动 UI 重组
+- **容错设计**：JSON 解析失败时删除旧文件静默降级
+
+#### 2. SearchUiState + SearchEvent 更新（search/model/SearchUiState.kt）
+
+**新增字段**：
+- `hasSearched: Boolean` — 标记用户是否已提交搜索（解决空态不显示的问题）
+- `searchHistory: List<AdItem>` — 搜索历史列表
+- `isHistoryLoaded: Boolean` — 历史是否已加载
+
+**新增事件**：
+- `AddToHistory(adItem)` — 点击搜索结果或历史条目时记录
+- `ClearHistory` — 清空所有历史
+- `LoadHistory` — 加载历史（ViewModel init 触发）
+- `GoBack` — 返回按钮（UI 层可处理）
+
+#### 3. SearchViewModel 更新（search/viewmodel/SearchViewModel.kt）
+
+**新增依赖**：`SearchHistoryManager`（Koin 注入）
+
+**返回逻辑 `handleBackPress()`**：
+```
+有搜索结果 (hasSearched=true) → clearResults() → 回到初始态 → return false（消费事件）
+无搜索结果 (hasSearched=false) → return true（UI 层执行 popBackStack）
+```
+
+**搜索历史管理**：
+- `loadHistory()` → 异步加载文件 → 收集 `historyManager.history` StateFlow → 更新 UI
+- `addToHistory(adItem)` → 追加/置顶 + 持久化
+- `clearHistory()` → 清空内存 + 文件
+
+**搜索执行调整**：
+- `onSubmitSearch()` / `executeSearch()` / `onSelectTrending()` / `onSelectSuggestion()` → 设置 `hasSearched = true`
+- `clearResults()` → 重置 `hasSearched = false`，保留热搜和历史
+
+#### 4. SearchScreen UI 更新（search/ui/SearchScreen.kt）
+
+**"输入"按钮**：
+- 搜索框 `trailingIcon` 区域显示 `Row(Text("输入") + ClearButton)`
+- 仅在输入框有文字时显示
+- 点击触发 `SubmitSearch`
+
+**搜索历史区域**：
+- 历史图标 + "搜索历史"标题 + 清空按钮
+- 每条历史：缩略图 + 广告标题 + 广告主名称
+- 点击历史条目 → 记录历史（置顶）+ 导航到详情页
+- 历史为空时不显示
+
+**空态修复**：
+- `showResults` = `hasSearched || searchLoadState == LOADING`
+- 搜索完成且结果为空时正常显示空态 UI（SearchOff 图标 + "未找到相关广告"）
+
+**返回逻辑修复**：
+- 返回按钮 `onClick` → `viewModel.handleBackPress()` → 结果页回初始，初始页回主页
+
+**UI 三阶段重定义**：
+```
+Phase 1 (INITIAL):    query.isBlank() && !hasSearched → 搜索历史 + 热门关键词
+Phase 2 (SUGGESTING):  query.isNotBlank() && !hasSearched → 联想建议
+Phase 3 (RESULTS):    hasSearched || LOADING → 结果列表
+```
+
+#### 5. DI 模块更新
+
+- `AppModule.kt`：注册 `SearchHistoryManager` 单例（依赖 Application Context）
+- `ViewModelModule.kt`：`SearchViewModel` 构造新增 `historyManager = get()`
+
+### 架构设计要点
+
+#### 搜索历史数据流
+
+```
+SearchScreen: 点击广告
+  → onAdClick(adItem)
+  → viewModel.onEvent(AddToHistory(adItem))
+  → SearchViewModel.addToHistory()
+  → SearchHistoryManager.addToHistory()
+     ├─ 去重（同 ID 删除旧条目）
+     ├─ 置顶（add(0, adItem)）
+     ├─ 截断（> 50 条）
+     ├─ 写入 JSON 文件
+     └─ _history.value = newList → StateFlow emit → UI 重组
+```
+
+### 关键设计决策
+
+| 决策项 | 内容 | 理由 |
+|--------|------|------|
+| 搜索历史内容 | 记录点进详情的广告，非搜索关键词 | 类似 Apple Music 搜索历史：用户关心的不是搜索了什么词，而是对哪些内容感兴趣 |
+| 历史持久化方式 | JSON 文件（kotlinx.serialization） | 复用已有的序列化基础设施，利用 AdItem 的 `@Serializable` 多态支持；无需引入新依赖 |
+| 返回逻辑实现 | `handleBackPress()` 返回 Boolean 决策 | ViewModel 知道当前状态（hasSearched），但 popBackStack 是 UI 层能力；通过返回值协调两层 |
+| 空态修复 | 引入 `hasSearched` 标记 vs 修改 showResults 条件 | `hasSearched` 语义更清晰，不与 LOADING/ERROR 状态耦合 |
+| "输入"按钮样式 | 文字按钮（非图标按钮） | 中文字"输入"更直观，符合用户习惯；放在 trailingIcon 区域利用现有布局 |
+
+### 文件变更
+
+| Action | File |
+|--------|------|
+| CREATE | `search/data/SearchHistoryManager.kt` |
+| MODIFY | `search/model/SearchUiState.kt` — 新增字段 + 事件 |
+| MODIFY | `search/viewmodel/SearchViewModel.kt` — 历史管理 + handleBackPress |
+| MODIFY | `search/ui/SearchScreen.kt` — 输入按钮 + 历史区域 + 空态修复 + 返回修复 |
+| MODIFY | `di/AppModule.kt` — 注册 SearchHistoryManager |
+| MODIFY | `di/ViewModelModule.kt` — 注入 historyManager |
+| MODIFY | `struct.md` — 新增 search/data/ 目录 |
+
+### 文档更新
+
+- `struct.md`：更新 search/ 目录结构 + Day 8 日期
+- `docs/daily-report.md`：Day 8 日报
+
+---
+
+## Day 8（续）：标签过滤完善 + 图片/视频加载优化
+
+### 完成内容
+
+#### 1. 修复 MockJsonDataSource 过滤分页 bug
+
+**问题**：`getAdsByTag()` 调用 `paginate(filtered, page, pageSize, fullData.totalPages)` 将未过滤的 `totalPages` 传给 `paginate()`。当过滤结果集远小于原始数据时（如 30 条→3 条），`fromIndex >= allItems.size` 的分支返回原始 totalPages（3 页），而实际只有 1 页。
+
+**修复**：
+- `paginate()` 移除 `originalTotalPages` 参数，始终基于实际数据量 `allItems.size` 计算 totalPages
+- `getAdsByTag()` 调用改为 `paginate(filtered, page, pageSize)`
+- `getAds()` 同步更新调用
+
+**影响**：过滤后列表底部正确显示"— 没有更多了 —"，而非触发空数据加载请求。
+
+#### 2. ImageRequestHelper 图片请求辅助工具（新建）
+
+**文件**：`common/imageloader/ImageRequestHelper.kt`
+
+- 统一构建优化的 `ImageRequest`，封装 Coil 3.x 的 `ImageRequest.Builder`
+- **精确尺寸解码**：`targetWidthDp` / `targetHeightDp` → 内部转为 px → `builder.size(Size(pxW, pxH))`，避免加载大图后在内存中缩放到小尺寸
+- **skipLoading 参数**：`true` 时跳过非必要加载（用于快速滑动优化）
+- **Coil 3.x 适配**：Coil 3.0.0 移除了 `Priority` API，改为通过 `skipLoading` 控制加载行为
+
+#### 3. ImageLoaderConfig 磁盘缓存清理器
+
+**新增方法**：`cleanupOldCache(context, maxAgeDays = 7)`
+
+- 在 `Dispatchers.IO` 执行，不阻塞主线程
+- 遍历 `image_cache` 目录，删除最后修改时间超过 7 天的文件
+- 失败静默处理（目录不存在、无权限等）
+- 设计理由：Coil 3.x 的 DiskCache 基于 LRU 大小驱逐（200MB 上限），不提供内建的"按时间过期"功能，此方法补充时间维度淘汰
+
+#### 4. OkHttp 全局重试拦截器
+
+**文件**：`common/network/NetworkConfig.kt`
+
+**重试策略**：
+| 条件 | 行为 |
+|------|------|
+| GET 请求 + IOException | 指数退避重试（1s→2s→4s），最多 3 次 |
+| POST/PUT/DELETE 请求 | 不重试（避免重复提交） |
+| 非 IOException（HTTP 4xx/5xx） | 不重试（由上层业务处理） |
+
+- 添加 `retryOnConnectionFailure(true)`（OkHttp 内建）
+- 自定义 `retryInterceptor()` 覆盖超时、EOF 等连接失败以外的场景
+- 主要受益场景：Coil 图片加载（通过 OkHttp 发送 GET 请求）
+
+#### 5. 卡片图片加载优化
+
+**LargeImageCard**：
+- 封面图使用 `ImageRequestHelper.buildOptimizedRequest()` + `targetWidthDp=400` 精确解码
+- 减少内存占用（避免加载 1920px 原图后在 Compose 中缩放）
+
+**SmallImageCard**：
+- 缩略图使用 `ImageRequestHelper.buildOptimizedRequest()` + `targetWidthDp=110, targetHeightDp=110`
+- 解码尺寸与显示尺寸一致，零浪费
+
+**VideoCard**：
+- 封面图（IDLE 态 + 暂停态）统一使用 `ImageRequestHelper` + `targetWidthDp=400`
+- 快速滑动时 `skipLoading = isScrollInProgress` → 跳过封面加载，让位给交互帧
+- 视频开始播放时通过 `imageLoader.enqueue()` 预加载下一个视频封面到磁盘缓存
+
+#### 6. 视频加载优化
+
+**快速滑动检测**：
+- HomeScreen 追踪每个频道的 `scrollStates: Map<Channel, Boolean>`（通过 `LazyListState.isScrollInProgress`）
+- 链路：`HomeScreen → FeedScreen(isScrollInProgress) → VideoCard(isScrollInProgress)`
+- 快速滑动时封面 `skipLoading = true`，停止后恢复正常加载
+
+**视频封面预加载**：
+- `VideoCard` 新增 `nextVideoCoverUrl: String?` 参数
+- `FeedScreen` 在渲染 VideoCard 时从列表中查找下一个 VideoAd 的封面 URL
+- 视频开始播放时，通过 Koin 获取 `ImageLoader` 并 `enqueue()` 预加载请求
+
+#### 7. AdsApplication 启动时缓存清理
+
+- 新增 `cleanExpiredImageCache()` 方法
+- 在 `cleanExpiredAiCache()` 之后调用
+- 复用 `applicationScope`（SupervisorJob + IO Dispatcher）
+
+### 架构设计要点
+
+#### 图片加载优化链路
+
+```
+Card Composable
+  └─ AsyncImage(model = ImageRequestHelper.buildOptimizedRequest(url, ...))
+       └─ ImageRequest.Builder
+            ├─ size(width, height)        ← 精确解码，降低内存
+            ├─ memoryCachePolicy(ENABLED) ← L1 缓存命中
+            ├─ diskCachePolicy(ENABLED)   ← L2 缓存命中
+            └─ skipLoading                ← 快速滑动时跳过
+
+请求进入 OkHttpClient
+  └─ retryInterceptor()                  ← GET 请求异常重试 3 次
+       └─ 指数退避: 1s → 2s → 4s
+
+Coil ImageLoader
+  ├─ 内存缓存 (1/8 RAM LRU)
+  ├─ 磁盘缓存 (200MB DiskLRU)           ← cleanupOldCache 每 7 天清理
+  └─ 网络请求 → OkHttpClient → OK
+```
+
+#### 视频优化流程
+
+```
+用户滚动信息流
+  ├─ LazyListState.isScrollInProgress → snapshotFlow → distinctUntilChanged
+  ├─ FeedScreen.onScrollStateChanged → HomeScreen.scrollStates[channel] = isScrolling
+  ├─ FeedScreen(isScrollInProgress = scrollStates[channel])
+  │   └─ VideoCard(isScrollInProgress)
+  │        ├─ isScrollInProgress=true  → skipLoading=true  → 封面不加载
+  │        └─ isScrollInProgress=false → skipLoading=false → 封面正常加载
+  │
+  └─ 用户点击播放按钮 → 视频开始播放
+       └─ nextVideoCoverUrl?.let { imageLoader.enqueue(preloadRequest) }
+            └─ 下一个视频封面后台缓存到磁盘
+```
+
+### 涉及文件清单
+
+| 操作 | 文件 |
+|------|------|
+| MODIFY | `data/local/MockJsonDataSource.kt` — 修复分页 totalPages 计算 |
+| CREATE | `common/imageloader/ImageRequestHelper.kt` — 图片请求辅助工具 |
+| MODIFY | `common/imageloader/ImageLoaderConfig.kt` — 新增 7 天过期缓存清理 |
+| MODIFY | `common/network/NetworkConfig.kt` — 新增 GET 请求重试拦截器 |
+| MODIFY | `feed/ui/card/LargeImageCard.kt` — 封面图精确解码 |
+| MODIFY | `feed/ui/card/SmallImageCard.kt` — 缩略图精确解码 |
+| MODIFY | `feed/ui/card/VideoCard.kt` — 封面优化 + 快速滑动 + 预加载 |
+| MODIFY | `feed/ui/FeedScreen.kt` — 传递 isScrollInProgress + 计算 nextVideoCoverUrl |
+| MODIFY | `feed/ui/HomeScreen.kt` — 传递 scrollStates 到 FeedScreen |
+| MODIFY | `AdsApplication.kt` — 启动时清理过期图片缓存 |
+
+### 关键设计决策
+
+| 决策项 | 内容 | 理由 |
+|--------|------|------|
+| Coil Priority 替代方案 | 使用 `skipLoading` 而非 Priority | Coil 3.0.0 移除了 `Priority` API，`skipLoading` 更直接地控制"此时是否加载" |
+| 图片精确解码尺寸 | 大图 400dp→px、缩略图 110dp→px | 与布局尺寸一致，避免 Coil 解码 1920px 原图后在 Compose 中缩放至 ~360dp |
+| 视频封面预加载触发时机 | `startPlayback` 中同步执行 | 用户在观看当前视频时，下一个封面在后台静默缓存，滑动时即时展示 |
+| 磁盘缓存 7 天过期 | 独立文件扫描 + 删除 | Coil DiskCache 无内建 TTL 机制，通过文件系统时间戳补充时间维度淘汰 |
+| 重试仅限 GET | 检查 `request.method` | POST 重试可能导致服务端重复创建资源（如重复发送 AI 请求） |
+
+### 文档更新
+
+- `struct.md`：更新 Day 8 日期标识 + 新增文件路径
+- `docs/daily-report.md`：Day 8（续）日报
+
+---
+
+## Day 9：行为采集 + 画像引擎 + 曝光追踪 + 个性化推荐 + 统计页面
+
+### 完成内容
+
+#### 1. BehaviorCollector 用户行为采集器（新建）
+
+**文件**：`behavior/tracker/BehaviorCollector.kt`
+
+- 采集 6 种用户行为：CLICK / LIKE / COLLECT / SHARE / TAG_CLICK / SEARCH
+- 使用 `SupervisorJob + Dispatchers.IO` 异步写入 Room，不阻塞主线程
+- 单次写入失败不影响后续采集（静默吞掉异常）
+- 提供 `collect(behavior)` 单条采集 + `collectAll(behaviors)` 批量采集
+- UserBehavior → BehaviorEntity 转换 + tags JSON 序列化
+
+#### 2. UserProfileEngine 用户画像引擎（新建）
+
+**文件**：`behavior/profile/UserProfileEngine.kt`
+
+- 从 Room BehaviorDao 读取所有行为记录
+- 按标签维度聚合加权得分：`得分 = Σ(行为次数 × 行为权重)`
+- 同时统计行为总览：总点击/点赞/收藏/分享数
+- 新用户（无行为数据）返回空画像
+- 计算在 `Dispatchers.IO` 上执行
+
+#### 3. RecommendRanker 个性化推荐排序器（新建）
+
+**文件**：`behavior/recommend/RecommendRanker.kt`
+
+- **精选频道**（有画像数据）：按标签匹配度降序排列
+  - 匹配度 = 广告的每个标签在用户画像中的权重之和
+  - 同分按曝光量降序（热门广告优先）
+- **精选频道**（新用户）及其他频道：按曝光量降序（热度排序）
+- 排序不修改原列表，返回新列表
+
+#### 4. ExposureTracker 曝光检测器（新建，Compose 适配版）
+
+**文件**：`analytics/tracker/ExposureTracker.kt`
+
+- 基于 `LazyListState.layoutInfo.visibleItemsInfo` 实时检测可见 item
+- **曝光判定**（与 tech.md §9.1.1 一致）：
+  - 可见比例 ≥ 50%（item.offset + item.size vs viewportSize.height）
+  - 停留时长 ≥ 1000ms
+  - 同会话去重（`Set<String>` 存储已曝光 adId）
+- `snapshotFlow` + `distinctUntilChanged` 避免重复计算
+- `collectLatest` 自动取消上一次未完成的收集
+- `Track(lazyListState, ads, onExposed)` Composable 函数，嵌入 FeedScreen
+
+#### 5. StatsScreen + StatsViewModel 统计页面（新建）
+
+**StatsViewModel**：`analytics/viewmodel/StatsViewModel.kt`
+- 并行加载全量广告（AdRepository.getAllAds()）+ 用户画像（UserProfileEngine）
+- 构建 `AdStatItem` 列表（曝光数 + 点击数 + CTR）
+- 支持按曝光/点击/CTR 三种维度排序
+- 管理 Tab 切换：广告统计 / 我的偏好
+
+**StatsScreen**：`analytics/ui/StatsScreen.kt`
+- **Tab "广告统计"**：
+  - 排序 FilterChip：按曝光 / 按点击 / 按 CTR
+  - LazyColumn 展示每广告：标题 + 曝光图标 + 点击图标 + CTR% + 动画进度条
+  - 空态：居中图标 + 提示文案
+- **Tab "我的偏好"**：
+  - 行为总览卡片：4 个小卡片（总点击/总点赞/总收藏/总分享），彩色图标 + 数字
+  - Top 标签权重柱状图：标签名 + 动画水平条 + 权重数值，颜色强度随权重变化
+  - 标签云（`FlowRow`）：SuggestionChip 自动换行，字号/字重/背景透明度随权重变化
+  - 空态：提示"还没有偏好数据"
+
+**AnalyticsModels**：`analytics/model/AnalyticsModels.kt`
+- `AdStatItem`（ad + exposureCount + clickCount + ctr）
+- `StatsSortBy`（EXPOSURE / CLICK / CTR）
+- `StatsTab`（AD_STATS / MY_PREFERENCES）
+- `StatsUiState` + `StatsEvent`（UDF 模式）
+
+#### 6. 数据层扩展——曝光/点击计数
+
+**AdDataSource 接口新增方法**：
+- `incrementExposure(adId)` — 递增曝光计数
+- `incrementClick(adId)` — 递增点击计数
+
+**实现**：
+- `MockJsonDataSource`：直接在内存缓存中 `ad.exposureCount += 1` / `ad.clickCount += 1`
+- `RemoteDataSource`：调用对应 Retrofit API 端点
+- `AdApiService`：定义 `POST /api/v1/ads/{adId}/exposure` 和 `/click` 端点
+
+**AdRepository 新增方法**：
+- `incrementExposure(adId)` / `incrementClick(adId)`
+- 更新 DataSource 后同步 Repository 本地 `channelItems` 缓存（`syncLocalCache`）
+- 确保 StatsScreen 读取到最新计数
+
+#### 7. FeedViewModel + DetailViewModel 行为采集集成
+
+**FeedViewModel**：
+- 新增构造参数 `BehaviorCollector`
+- `toggleLike` → 采集 LIKE 行为
+- `toggleCollect` → 采集 COLLECT 行为
+- `share` → 采集 SHARE 行为
+- `filterByTag` → 采集 TAG_CLICK 行为（不关联特定广告）
+- `navigateToDetail` → 采集 CLICK 行为 + 调用 `repository.incrementClick`
+- `onAdExposed` → 调用 `repository.incrementExposure`
+- 新增 `FeedEvent.Expose(adId)` 事件
+
+**DetailViewModel**：
+- 新增构造参数 `BehaviorCollector`
+- `toggleLike` / `toggleCollect` / `share` → 采集对应行为
+
+#### 8. FeedScreen 曝光追踪集成
+
+- `remember { ExposureTracker() }`
+- `exposureTracker.Track(lazyListState, ads, onExposed = { viewModel.onEvent(FeedEvent.Expose(it)) })`
+- 嵌入在 LaunchedEffect 链中，与上拉加载检测并列
+
+#### 9. 导航与入口
+
+- **MainActivity**：新增 `"stats"` 路由 → StatsScreen
+- **HomeScreen**：TopAppBar 新增柱状图图标按钮（BarChart）→ `onNavigateToStats`
+
+### 架构设计要点
+
+#### 数据流全景
+
+```
+用户交互
+  ├─ 信息流 (FeedScreen)
+  │   ├─ 点击卡片 → FeedEvent.CardClick
+  │   │   ├─ BehaviorCollector.collect(CLICK) → Room
+  │   │   └─ AdRepository.incrementClick() → DataSource
+  │   ├─ 点赞/收藏/分享 → BehaviorCollector → Room
+  │   ├─ 标签点击 → BehaviorCollector.collect(TAG_CLICK) → Room
+  │   └─ 曝光追踪 → ExposureTracker.Track()
+  │       ├─ LazyListState.layoutInfo → snapshotFlow
+  │       ├─ 可见比例 ≥50% + 停留 ≥1s → onExposed
+  │       └─ AdRepository.incrementExposure() → DataSource
+  │
+  ├─ 详情页 (DetailScreen)
+  │   └─ 点赞/收藏/分享 → BehaviorCollector → Room
+  │
+  └─ 统计页 (StatsScreen)
+      ├─ AdRepository.getAllAds() → 广告曝光/点击数据
+      ├─ UserProfileEngine.compute() → 用户画像
+      │   └─ BehaviorDao.getAllOnce() → 标签权重聚合
+      └─ UI 展示：广告统计 + 我的偏好
+```
+
+#### 个性化推荐链路
+
+```
+用户互动 → BehaviorCollector → Room user_behaviors
+    ↓
+UserProfileEngine.computeProfile()
+    ↓ tagWeights: Map<"运动"→10.0, "学生党"→5.0, ...>
+    ↓
+RecommendRanker.rank(ads, Channel.FEATURED)
+    ↓
+    每条广告 matchScore = Σ(tagWeights[tag.name])
+    ↓
+    按 matchScore DESC, exposureCount DESC 排序
+    ↓
+FeedViewModel → uiState.ads → LazyColumn
+```
+
+#### 曝光检测 Compose 实现 vs RecyclerView 方案
+
+| 维度 | RecyclerView (tech.md 原方案) | Compose (Day 9 实现) |
+|------|------|------|
+| 可见性检测 | `OnScrollListener + findFirstVisibleItemPosition` | `snapshotFlow { layoutInfo.visibleItemsInfo }` |
+| 延时机制 | `Handler.postDelayed(runnable, 1000)` | 时间戳差值比较（`now - startTime >= 1000`） |
+| 去重 | `mutableSetOf<String>()` | 同 |
+| 取消机制 | `handler.removeCallbacks(it)` | 不满足 50% 时 `visibilityStartTime.remove(index)` |
+| 帧率影响 | View 测量（layout / measure） | Compose snapshot 通知，无额外 View 测量 |
+
+### 涉及文件清单
+
+| 操作 | 文件 |
+|------|------|
+| CREATE | `behavior/tracker/BehaviorCollector.kt` — 6 种行为采集 + Room 写入 |
+| CREATE | `behavior/profile/UserProfileEngine.kt` — 标签权重聚合 → UserProfile |
+| CREATE | `behavior/recommend/RecommendRanker.kt` — 个性化推荐排序 |
+| CREATE | `analytics/tracker/ExposureTracker.kt` — Compose 曝光检测 |
+| CREATE | `analytics/model/AnalyticsModels.kt` — 统计模型 |
+| CREATE | `analytics/viewmodel/StatsViewModel.kt` — 统计页 ViewModel |
+| CREATE | `analytics/ui/StatsScreen.kt` — 统计页 Composable |
+| MODIFY | `data/local/AdDataSource.kt` — 新增 incrementExposure / incrementClick 接口 |
+| MODIFY | `data/local/MockJsonDataSource.kt` — 实现曝光/点击计数递增 |
+| MODIFY | `data/remote/RemoteDataSource.kt` — 桩实现曝光/点击计数 |
+| MODIFY | `data/remote/AdApiService.kt` — 新增曝光/点击 Retrofit 端点 |
+| MODIFY | `data/repository/AdRepository.kt` — 新增曝光/点击方法 + syncLocalCache |
+| MODIFY | `feed/model/FeedUiState.kt` — 新增 FeedEvent.Expose 事件 |
+| MODIFY | `feed/viewmodel/FeedViewModel.kt` — 注入 BehaviorCollector + 行为采集 + 曝光/点击 |
+| MODIFY | `detail/viewmodel/DetailViewModel.kt` — 注入 BehaviorCollector + 行为采集 |
+| MODIFY | `feed/ui/FeedScreen.kt` — 集成 ExposureTracker |
+| MODIFY | `feed/ui/HomeScreen.kt` — 新增统计入口按钮 |
+| MODIFY | `di/AppModule.kt` — 注册 BehaviorCollector / UserProfileEngine / RecommendRanker |
+| MODIFY | `di/ViewModelModule.kt` — 更新 FeedViewModel / DetailViewModel / 注册 StatsViewModel |
+| MODIFY | `MainActivity.kt` — 新增 stats 路由 |
+| UPDATE | `struct.md` — 更新 Day 9 日期 + 新增文件路径 |
+| UPDATE | `docs/daily-report.md` — Day 9 日报 |
+
+### 关键设计决策
+
+| 决策项 | 内容 | 理由 |
+|--------|------|------|
+| BehaviorCollector 在 ViewModel 构造注入 | 通过 Koin 注入到 FeedViewModel + DetailViewModel | 行为采集属于业务逻辑层，不应在 UI 层（Composable）直接调用 |
+| 曝光/点击计数放 DataSource 层 | 在 AdDataSource 接口新增 `incrementExposure`/`incrementClick` | 与 `updateInteraction` 同级，支持 Mock/Remote 切换 |
+| ExposureTracker Track() 为 Composable 函数 | `@Composable fun Track(lazyListState, ads, onExposed)` | Compose 中无法在类方法中直接使用 LaunchedEffect，通过 Composable 扩展函数桥接 |
+| StatsScreen 使用 viewModel.uiState 而非 collectAsState | `val uiState = viewModel.uiState` | 与 FeedScreen 保持一致，ViewModel 中 `by mutableStateOf` 的 getter 读取即被 Compose 追踪 |
+| 标签云使用 FlowRow | `ExperimentalLayoutApi.FlowRow` | 标签数量不固定，FlowRow 自动换行，无需预计算行数 |
+| 权重柱状图使用 Box + animateFloatAsState | 自定义实现，非第三方图表库 | 避免引入额外依赖（MPAndroidChart 等），Compose 动画 API 足以实现 |
+
+### 文档更新
+
+- `struct.md`：更新 Day 9 日期 + 新增 analytics/、behavior/ 子目录文件
+- `docs/daily-report.md`：Day 9 日报
+
+---
+
+## Day 10：行为系统集成 — RecommendRanker 打通 + SEARCH 行为采集覆盖
+
+### 背景
+
+Day 9 实现了 behavior 模块的全部构建块（BehaviorCollector / UserProfileEngine / RecommendRanker），但存在以下**集成缺口**：
+
+1. **RecommendRanker 已实现但未接入信息流** — FeedViewModel 加载广告后未调用排序
+2. **SEARCH 行为未覆盖全部搜索入口** — SearchViewModel 和 ChatViewModel 没有 BehaviorCollector
+3. **个性化推荐不可感知** — 精选频道行为数据已采集但排序未生效
+
+Day 10 的核心工作是**打通端到端数据流**，让 Day 9 的构建块真正生效。
+
+### 完成内容
+
+#### 1. RecommendRanker 集成到 FeedViewModel（FeedViewModel.kt）
+
+**改动点**：
+- 新增构造参数 `recommendRanker: RecommendRanker`
+- `loadFirstPage(channel)` — 精选频道加载后调用 `recommendRanker.rank(items, channel)` 排序
+- `refresh()` — 精选频道刷新后同样应用排序
+- `loadMore()` — 精选频道上拉加载后合并全量列表重排（确保最匹配广告始终在前）
+- 电商/本地频道不做个性化排序，保持热度排序
+
+**排序生效路径**：
+```
+用户行为 → BehaviorCollector → Room user_behaviors
+    ↓
+UserProfileEngine.computeProfile() → tagWeights
+    ↓
+FeedViewModel.loadFirstPage(FEATURED)
+    → repository.loadFirstPage() → items
+    → recommendRanker.rank(items, FEATURED)
+        → profileEngine.computeProfile()
+        → 有画像: rankByProfileMatch (匹配度降序)
+        → 无画像: sortedByDescending(exposureCount) (热度降序)
+    → uiState.ads = ranked → LazyColumn 渲染
+```
+
+#### 2. SearchViewModel 添加 SEARCH 行为采集（SearchViewModel.kt）
+
+**改动点**：
+- 新增构造参数 `behaviorCollector: BehaviorCollector`
+- `onSubmitSearch(query)` — 提交搜索时 `collectSearchBehavior(query)`
+- `executeSearch(query)` — 热搜/联想点击搜索时同样采集
+- 新增 `collectSearchBehavior(query: String)` 方法：
+  - 将搜索查询按空格/中文逗号/英文逗号分词
+  - 过滤空字符串和单字符
+  - 构造 `UserBehavior(adId=null, type=SEARCH, tags=keywords)`
+  - 委托 `BehaviorCollector.collect()` 异步写入 Room
+
+#### 3. ChatViewModel 添加 SEARCH 行为采集（ChatViewModel.kt）
+
+**改动点**：
+- 新增构造参数 `behaviorCollector: BehaviorCollector`
+- `sendMessage(content)` — 添加用户消息气泡后调用 `collectSearchBehavior(trimmed)`
+- 新增 `collectSearchBehavior(query: String)` 方法（与 SearchViewModel 实现一致）
+- 对话式搜索和常规搜索均记录为 SEARCH 行为，区别在于 tags 字段（自然语言 vs 关键词）
+
+#### 4. ViewModelModule DI 配置更新（ViewModelModule.kt）
+
+| ViewModel | 新增参数 | 说明 |
+|-----------|---------|------|
+| FeedViewModel | `recommendRanker = get()` | 精选频道个性化排序 |
+| ChatViewModel | `behaviorCollector = get()` | 对话搜索行为采集 |
+| SearchViewModel | `behaviorCollector = get()` | 常规搜索行为采集 |
+
+### 6 种行为采集覆盖矩阵
+
+| 行为类型 | 触发场景 | 采集位置 | Day 9 状态 | Day 10 状态 |
+|---------|---------|---------|-----------|------------|
+| CLICK | 点击广告卡片进入详情 | FeedViewModel.navigateToDetail | ✅ | ✅ |
+| LIKE | 点击点赞按钮 | FeedViewModel / DetailViewModel | ✅ | ✅ |
+| COLLECT | 点击收藏按钮 | FeedViewModel / DetailViewModel | ✅ | ✅ |
+| SHARE | 触发分享行为 | FeedViewModel / DetailViewModel | ✅ | ✅ |
+| TAG_CLICK | 点击卡片标签 Chip | FeedViewModel.filterByTag | ✅ | ✅ |
+| SEARCH | 常规搜索 | SearchViewModel | ❌ | ✅ |
+| SEARCH | 对话式搜索 | ChatViewModel | ❌ | ✅ |
+
+（SEARCH 行为在 Day 9 已有 BehaviorType 枚举和采集器支持，但 SearchViewModel 和 ChatViewModel 未注入 BehaviorCollector）
+
+### 架构设计要点
+
+#### 个性化推荐端到端数据流
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 用户交互层                                                    │
+│  FeedScreen ←→ FeedViewModel                                │
+│      │ 点赞/收藏/分享/点击/标签/曝光                           │
+│      ▼                                                       │
+│  BehaviorCollector.collect(UserBehavior)                     │
+│      │ 异步写入 Room (user_behaviors 表)                      │
+│      ▼                                                       │
+│  UserProfileEngine.computeProfile()                          │
+│      │ 标签维度权重聚合                                        │
+│      │ tagWeights: {"运动"→10, "学生党"→5, "性价比"→2}        │
+│      ▼                                                       │
+│  RecommendRanker.rank(ads, FEATURED)                         │
+│      │ 有画像: Σ(tagWeights[ad.tag.name]) 降序                │
+│      │ 无画像: exposureCount 降序                              │
+│      ▼                                                       │
+│  FeedViewModel.uiState.ads → LazyColumn                      │
+│      │ 精选频道按个性化排序展示                                 │
+│      └ 用户可感知偏好标签相关的广告排在前面                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 搜索行为 → 用户画像关联链路
+
+```
+常规搜索: SearchScreen → 输入 "运动鞋" → onSubmitSearch
+    → BehaviorCollector.collect(SEARCH, tags=["运动鞋"])
+    → Room user_behaviors
+
+对话搜索: ChatScreen → 输入 "适合学生党的平价数码" → sendMessage
+    → BehaviorCollector.collect(SEARCH, tags=["适合学生党的平价数码"])
+    → Room user_behaviors
+
+用户画像计算:
+    → UserProfileEngine.computeProfile()
+    → tagWeights: {"运动鞋"→+1, "适合学生党的平价数码"→+1, ...}
+    → 虽然自然语言查询的完整文本作为 tag 效果有限，
+       但搜索行为权重(×1)较低，不影响主要兴趣标签的聚合效果
+```
+
+### 涉及文件清单
+
+| 操作 | 文件 | 变更说明 |
+|------|------|---------|
+| MODIFY | `feed/viewmodel/FeedViewModel.kt` | 注入 RecommendRanker + loadFirstPage/refresh/loadMore 应用排序 |
+| MODIFY | `search/viewmodel/SearchViewModel.kt` | 注入 BehaviorCollector + 搜索行为采集 |
+| MODIFY | `ai/chat/viewmodel/ChatViewModel.kt` | 注入 BehaviorCollector + 对话搜索行为采集 |
+| MODIFY | `di/ViewModelModule.kt` | 更新 3 个 ViewModel 的 Koin 注入声明 |
+
+### 关键设计决策
+
+| 决策项 | 内容 | 理由 |
+|--------|------|------|
+| loadMore 时整体重排 vs 仅追加 | 合并全量列表后整体重排 | 新数据可能包含用户偏好标签匹配度更高的广告，仅追加会导致高匹配度广告被埋在后面 |
+| 搜索 query 分词作为 tags | 按空格和标点拆分关键词作为行为标签 | SEARCH 权重(×1)较低，且搜索词本身反映用户当前兴趣，对画像有补充价值 |
+| 个性化排序仅作用于精选频道 | 电商/本地频道保持热度排序 | 与 tech.md §10.3 设计一致——频道本身已是内容分类，精选频道才需要跨品类个性化 |
+| 搜索行为 adId 为 null | 不关联特定广告 | 搜索是全局行为（与具体广告无关），关键词作为 tags 记录即可参与画像聚合 |
+
+### 验证结果
+
+- `./gradlew compileDebugKotlin` — **BUILD SUCCESSFUL** (8 actionable tasks)
+- 所有 4 个文件修改编译通过，无新增错误
+
+### 文档更新
+
+- `struct.md`：更新日期为 Day 10
+- `docs/daily-report.md`：Day 10 日报
+
+---
+

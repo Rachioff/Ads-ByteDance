@@ -40,6 +40,10 @@ android {
             "\"${localProperties.getProperty("ai.api.key", "")}\"")
         buildConfigField("String", "AI_API_BASE_URL",
             "\"${localProperties.getProperty("ai.api.base.url", "https://api.openai.com")}\"")
+
+        // Chat Bot 微服务地址（从 local.properties 注入）
+        buildConfigField("String", "CHATBOT_SERVICE_URL",
+            "\"${localProperties.getProperty("chatbot.service.url", "http://localhost:8080")}\"")
     }
 
     buildTypes {

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
+import com.bytedance.ads_bytedance.ai.model.AiGeneratedContent
 import com.bytedance.ads_bytedance.data.model.AdItem
 
 /**
@@ -36,6 +37,7 @@ import com.bytedance.ads_bytedance.data.model.AdItem
 @Composable
 fun SmallImageCard(
     ad: AdItem.SmallImageAd,
+    aiContent: AiGeneratedContent? = null,
     onLikeClick: () -> Unit,
     onCollectClick: () -> Unit,
     onShareClick: () -> Unit,
@@ -84,6 +86,13 @@ fun SmallImageCard(
                         overflow = TextOverflow.Ellipsis
                     )
                     Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // AI 摘要（优先用 AI 生成内容，否则回退到静态 aiSummary）
+                val summaryText = aiContent?.summary ?: ad.aiSummary
+                if (!summaryText.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    AiSummaryLabel(summary = summaryText)
                 }
 
                 // 广告主信息
