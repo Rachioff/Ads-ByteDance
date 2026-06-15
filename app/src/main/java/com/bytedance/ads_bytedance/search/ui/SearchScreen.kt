@@ -49,10 +49,14 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -104,6 +108,18 @@ fun SearchScreen(
     // 页面进入时自动聚焦搜索框
     LaunchedEffect(Unit) {
         focusRequester.requestFocus()
+    }
+
+    // 监听 Lifecycle：从详情页返回时自动刷新搜索历史
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshHistory()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val showSuggestions = uiState.query.isNotBlank() && !uiState.hasSearched
@@ -283,7 +299,7 @@ private fun SearchHistorySection(
     onItemClick: (AdItem) -> Unit,
     onClearAll: () -> Unit
 ) {
-    if (!isLoaded || history.isEmpty()) return
+    if (!isLoaded) return
 
     Column(
         modifier = Modifier
@@ -317,25 +333,37 @@ private fun SearchHistorySection(
                     fontWeight = FontWeight.Bold
                 )
             }
-            // 清空按钮
-            IconButton(onClick = onClearAll, modifier = Modifier.size(28.dp)) {
-                Icon(
-                    imageVector = Icons.Filled.Clear,
-                    contentDescription = "清除所有历史",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.size(16.dp)
-                )
+            // 清空按钮（仅有历史记录时显示）
+            if (history.isNotEmpty()) {
+                IconButton(onClick = onClearAll, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        imageVector = Icons.Filled.Clear,
+                        contentDescription = "清除所有历史",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // 历史条目列表
-        history.forEach { adItem ->
-            SearchHistoryItem(
-                adItem = adItem,
-                onClick = { onItemClick(adItem) }
+        if (history.isEmpty()) {
+            // 空态提示
+            Text(
+                text = "暂无搜索历史，点击搜索结果中的广告即可记录",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.padding(vertical = 8.dp)
             )
+        } else {
+            // 历史条目列表
+            history.forEach { adItem ->
+                SearchHistoryItem(
+                    adItem = adItem,
+                    onClick = { onItemClick(adItem) }
+                )
+            }
         }
     }
 }
@@ -400,7 +428,7 @@ private fun TrendingKeywordsSection(
 ) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .padding(horizontal = 16.dp)
     ) {
         // 标题

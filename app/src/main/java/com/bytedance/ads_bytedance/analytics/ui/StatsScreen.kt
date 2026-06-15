@@ -19,13 +19,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.RemoveRedEye
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.TouchApp
@@ -71,7 +71,7 @@ import com.bytedance.ads_bytedance.ui.theme.LikeRed
  * - 广告列表：标题 + 曝光数 + 点击数 + CTR 进度条
  *
  * ## 我的偏好
- * - 行为总览卡片：总点击 / 总点赞 / 总收藏 / 总分享
+ * - 行为总览卡片：浏览记录 / 总点赞 / 总收藏 / 总分享（点赞/收藏点击跳转对应列表页）
  * - Top 偏好标签 + 权重柱状图
  * - 标签云（FlowRow 可视化）
  *
@@ -132,7 +132,7 @@ fun StatsScreen(
             // ── 内容区 ──
             when (uiState.activeTab) {
                 StatsTab.AD_STATS -> AdStatsContent(uiState, onEvent)
-                StatsTab.MY_PREFERENCES -> MyPreferencesContent(uiState)
+                StatsTab.MY_PREFERENCES -> MyPreferencesContent(uiState, onEvent)
             }
         }
     }
@@ -315,7 +315,10 @@ private fun AdStatRow(statItem: AdStatItem) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun MyPreferencesContent(uiState: StatsUiState) {
+private fun MyPreferencesContent(
+    uiState: StatsUiState,
+    onEvent: (StatsEvent) -> Unit
+) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
@@ -329,7 +332,7 @@ private fun MyPreferencesContent(uiState: StatsUiState) {
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.padding(bottom = 8.dp)
             )
-            BehaviorOverviewRow(uiState)
+            BehaviorOverviewRow(uiState, onEvent)
         }
 
         // ── Top 偏好标签 ──
@@ -391,19 +394,26 @@ private fun MyPreferencesContent(uiState: StatsUiState) {
 /**
  * 行为总览卡片行
  *
- * 4 个小的统计卡片：点击 / 点赞 / 收藏 / 分享
+ * 4 个统计卡片：浏览记录 / 总点赞 / 总收藏 / 总分享
+ * - 浏览记录：点击 → ShowHistory 事件 → 导航到浏览记录页
+ * - 总点赞：点击 → ShowLikedAds 事件 → 导航到已点赞列表页
+ * - 总收藏：点击 → ShowCollectedAds 事件 → 导航到已收藏列表页
  */
 @Composable
-private fun BehaviorOverviewRow(uiState: StatsUiState) {
+private fun BehaviorOverviewRow(
+    uiState: StatsUiState,
+    onEvent: (StatsEvent) -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         BehaviorStatCard(
-            label = "总点击",
+            label = "浏览记录",
             value = uiState.totalClicks,
-            icon = { Icons.Filled.TouchApp },
+            icon = { Icons.Filled.History },
             color = MaterialTheme.colorScheme.primary,
+            onClick = { onEvent(StatsEvent.ShowHistory) },
             modifier = Modifier.weight(1f)
         )
         BehaviorStatCard(
@@ -411,6 +421,7 @@ private fun BehaviorOverviewRow(uiState: StatsUiState) {
             value = uiState.totalLikes,
             icon = { Icons.Filled.Favorite },
             color = LikeRed,
+            onClick = { onEvent(StatsEvent.ShowLikedAds) },
             modifier = Modifier.weight(1f)
         )
         BehaviorStatCard(
@@ -418,6 +429,7 @@ private fun BehaviorOverviewRow(uiState: StatsUiState) {
             value = uiState.totalCollects,
             icon = { Icons.Filled.Bookmark },
             color = CollectAmber,
+            onClick = { onEvent(StatsEvent.ShowCollectedAds) },
             modifier = Modifier.weight(1f)
         )
         BehaviorStatCard(
@@ -432,6 +444,8 @@ private fun BehaviorOverviewRow(uiState: StatsUiState) {
 
 /**
  * 单个行为统计小卡片
+ *
+ * @param onClick 可选点击回调（浏览记录/总点赞/总收藏 有，总分享 无）
  */
 @Composable
 private fun BehaviorStatCard(
@@ -439,10 +453,13 @@ private fun BehaviorStatCard(
     value: Int,
     icon: @Composable () -> androidx.compose.ui.graphics.vector.ImageVector,
     color: androidx.compose.ui.graphics.Color,
+    onClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = modifier,
+        modifier = modifier.then(
+            if (onClick != null) Modifier.clickable { onClick() } else Modifier
+        ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = color.copy(alpha = 0.08f)

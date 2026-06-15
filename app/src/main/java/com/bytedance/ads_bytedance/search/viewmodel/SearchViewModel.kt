@@ -274,29 +274,65 @@ class SearchViewModel(
     // 搜索历史
     // ═══════════════════════════════════════════════════════
 
-    /** 加载搜索历史（从文件异步读取） */
+    /**
+     * 加载搜索历史并持续监听更新
+     *
+     * 关键时序：必须先 await loadAsync() 完成，确保文件数据已读入 _history StateFlow，
+     * 然后再启动 collect — 这样首次收集到的就是已加载的真实数据，而非初始空列表。
+     */
     private fun loadHistory() {
         viewModelScope.launch {
+            // 第一步：等待文件加载完成
             historyManager.loadAsync()
-            viewModelScope.launch {
-                historyManager.history.collect { items ->
-                    _uiState.update { it.copy(searchHistory = items, isHistoryLoaded = true) }
-                }
+            // 第二步：同步已加载数据到 UI（确保即便 collect 还未开始，UI 也有正确数据）
+            _uiState.update {
+                it.copy(
+                    searchHistory = historyManager.history.value,
+                    isHistoryLoaded = true
+                )
+            }
+            // 第三步：启动持续监听（此时 _history 已在 loadAsync 中完成赋值，collect 首次收到的是真实数据）
+            historyManager.history.collect { items ->
+                _uiState.update { it.copy(searchHistory = items, isHistoryLoaded = true) }
             }
         }
     }
 
-    /** 添加广告到搜索历史 */
+    /** 添加广告到搜索历史（乐观更新 + 后台持久化） */
     private fun addToHistory(adItem: com.bytedance.ads_bytedance.data.model.AdItem) {
+        // 乐观更新 UI：立即反映在搜索历史列表顶部
+        val current = _uiState.value.searchHistory.toMutableList()
+        current.removeAll { it.id == adItem.id }
+        current.add(0, adItem)
+        if (current.size > 50) {
+            current.subList(50, current.size).clear()
+        }
+        _uiState.update { it.copy(searchHistory = current, isHistoryLoaded = true) }
+
+        // 后台持久化
         viewModelScope.launch {
             historyManager.addToHistory(adItem)
         }
     }
 
-    /** 清空搜索历史 */
+    /** 清空搜索历史（乐观更新 + 后台持久化） */
     private fun clearHistory() {
+        _uiState.update { it.copy(searchHistory = emptyList(), isHistoryLoaded = true) }
         viewModelScope.launch {
             historyManager.clearHistory()
+        }
+    }
+
+    /** 供 Lifecycle ON_RESUME 调用的刷新入口 */
+    fun refreshHistory() {
+        viewModelScope.launch {
+            historyManager.loadAsync()
+            _uiState.update {
+                it.copy(
+                    searchHistory = historyManager.history.value,
+                    isHistoryLoaded = true
+                )
+            }
         }
     }
 

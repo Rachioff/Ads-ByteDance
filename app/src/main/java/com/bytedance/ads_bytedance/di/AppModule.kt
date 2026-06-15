@@ -61,18 +61,20 @@ val appModule = module {
     // 本地存储 (Day 2 实现)
     // ═══════════════════════════════════════════════════════
 
-    /** Room 数据库——广告数据 / 用户行为 / AI 缓存 */
+    /** Room 数据库——广告数据 / 用户行为 / 用户互动状态 / AI 缓存 */
     single<AppDatabase> {
         Room.databaseBuilder(
             get(),
             AppDatabase::class.java,
             "ads_bytedance.db"
-        ).build()
+        ).addMigrations(AppDatabase.MIGRATION_1_2)
+        .build()
     }
 
     /** DAO 实例——由 Room Database 提供 */
     single { get<AppDatabase>().adDao() }
     single { get<AppDatabase>().behaviorDao() }
+    single { get<AppDatabase>().userInteractionDao() }
     single { get<AppDatabase>().aiCacheDao() }
 
     // ═══════════════════════════════════════════════════════
@@ -139,14 +141,20 @@ val appModule = module {
     // 埋点与行为 (Day 9 实现)
     // ═══════════════════════════════════════════════════════
 
-    /** 用户行为采集器——6 种行为采集 + Room 持久化 */
+    /** 用户行为采集器——6 种行为采集 + 互动状态更新 + Room 持久化 */
     single<com.bytedance.ads_bytedance.behavior.tracker.BehaviorCollector> {
-        com.bytedance.ads_bytedance.behavior.tracker.BehaviorCollector(behaviorDao = get())
+        com.bytedance.ads_bytedance.behavior.tracker.BehaviorCollector(
+            behaviorDao = get(),
+            interactionDao = get()
+        )
     }
 
     /** 用户画像引擎——标签维度权重聚合 → UserProfile */
     single<com.bytedance.ads_bytedance.behavior.profile.UserProfileEngine> {
-        com.bytedance.ads_bytedance.behavior.profile.UserProfileEngine(behaviorDao = get())
+        com.bytedance.ads_bytedance.behavior.profile.UserProfileEngine(
+            behaviorDao = get(),
+            interactionDao = get()
+        )
     }
 
     /** 个性化推荐排序器——精选频道按画像匹配度排序 */

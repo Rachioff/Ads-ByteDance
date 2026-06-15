@@ -2,6 +2,7 @@ package com.bytedance.ads_bytedance.di
 
 import com.bytedance.ads_bytedance.feed.viewmodel.FeedViewModel
 import org.koin.androidx.viewmodel.dsl.viewModel
+import org.koin.core.parameter.parametersOf
 import org.koin.dsl.module
 
 /**
@@ -61,6 +62,16 @@ val viewModelModule = module {
         com.bytedance.ads_bytedance.analytics.viewmodel.StatsViewModel(
             repository = get(),
             profileEngine = get()
+        )
+    }
+
+    // ── 广告列表页：浏览记录 / 已点赞 / 已收藏 (Day 11) ──
+    viewModel { (type: com.bytedance.ads_bytedance.analytics.viewmodel.AdListType) ->
+        com.bytedance.ads_bytedance.analytics.viewmodel.AdListViewModel(
+            repository = get(),
+            behaviorDao = get(),
+            interactionDao = get(),
+            type = type
         )
     }
 }

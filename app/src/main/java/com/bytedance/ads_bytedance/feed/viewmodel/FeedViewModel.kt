@@ -239,8 +239,13 @@ class FeedViewModel(
         // UI snapshot 立即更新（乐观更新，用户无需等待网络）
         likedAdIds[adId] = newLiked
 
-        // 采集行为：点赞
-        collectBehavior(adId, BehaviorType.LIKE)
+        // 向 Room 更新互动状态（模拟服务端状态管理——点赞/取消都更新）
+        behaviorCollector.updateInteraction(adId, isLiked = newLiked)
+
+        // 仅在正向点赞时记录行为（用于画像计算，取消点赞不记录）
+        if (newLiked) {
+            collectBehavior(adId, BehaviorType.LIKE)
+        }
 
         // 异步委托给 Repository → DataSource（Mock: 内存计数联动 / Remote: API 调用）
         viewModelScope.launch {
@@ -263,8 +268,13 @@ class FeedViewModel(
         // UI snapshot 立即更新（乐观更新）
         collectedAdIds[adId] = newCollected
 
-        // 采集行为：收藏
-        collectBehavior(adId, BehaviorType.COLLECT)
+        // 向 Room 更新互动状态（模拟服务端状态管理——收藏/取消都更新）
+        behaviorCollector.updateInteraction(adId, isCollected = newCollected)
+
+        // 仅在正向收藏时记录行为（用于画像计算，取消收藏不记录）
+        if (newCollected) {
+            collectBehavior(adId, BehaviorType.COLLECT)
+        }
 
         // 异步委托给 Repository → DataSource
         viewModelScope.launch {

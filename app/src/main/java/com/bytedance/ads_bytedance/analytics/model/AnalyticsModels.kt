@@ -45,9 +45,9 @@ enum class StatsTab(val label: String) {
  * @param adStats 广告统计列表
  * @param sortBy 当前排序维度
  * @param activeTab 当前 Tab
- * @param totalClicks 用户总点击次数
- * @param totalLikes 用户总点赞数
- * @param totalCollects 用户总收藏数
+ * @param totalClicks 用户浏览过的独立广告数（去重，来源：行为事件表中 CLICK 的 DISTINCT ad_id，与"浏览记录"列表条目数一致）
+ * @param totalLikes 用户总点赞数（来源：user_interactions 表真实状态）
+ * @param totalCollects 用户总收藏数（来源：user_interactions 表真实状态）
  * @param totalShares 用户总分享数
  * @param topTags 用户 Top 偏好标签（标签名 → 权重得分）
  * @param isLoading 是否正在加载
@@ -73,6 +73,15 @@ sealed class StatsEvent {
 
     /** 切换 Tab */
     data class ChangeTab(val tab: StatsTab) : StatsEvent()
+
+    /** 点击查看浏览记录 */
+    data object ShowHistory : StatsEvent()
+
+    /** 点击查看已点赞广告 */
+    data object ShowLikedAds : StatsEvent()
+
+    /** 点击查看已收藏广告 */
+    data object ShowCollectedAds : StatsEvent()
 
     /** 返回上一页 */
     data object Back : StatsEvent()

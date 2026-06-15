@@ -11,7 +11,6 @@ import com.bytedance.ads_bytedance.analytics.model.StatsSortBy
 import com.bytedance.ads_bytedance.analytics.model.StatsTab
 import com.bytedance.ads_bytedance.analytics.model.StatsUiState
 import com.bytedance.ads_bytedance.behavior.profile.UserProfileEngine
-import com.bytedance.ads_bytedance.data.model.LoadState
 import com.bytedance.ads_bytedance.data.repository.AdRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -31,6 +30,7 @@ import kotlinx.coroutines.withContext
  * AdRepository.getAllAds()      → 广告统计列表
  * UserProfileEngine.compute()   → 用户画像 + Top 标签
  * ```
+ * 点击"浏览记录"/"总点赞"/"总收藏"卡片 → NavController 导航到对应 AdListScreen
  *
  * @param repository 广告数据仓库（Koin 注入）
  * @param profileEngine 用户画像引擎（Koin 注入）
@@ -48,15 +48,28 @@ class StatsViewModel(
         loadStats()
     }
 
+    /**
+     * 刷新统计数据（Lifecycle ON_RESUME 时由外部调用）
+     *
+     * 当用户从详情页返回（可能修改了点赞/收藏状态）或从广告列表页返回时，
+     * 需要重新加载数据以确保统计数字为最新。
+     */
+    fun refreshStats() {
+        loadStats()
+    }
+
     // ═══════════════════════════════════════════════════════
     // 事件分发
     // ═══════════════════════════════════════════════════════
 
     fun onEvent(event: StatsEvent) {
         when (event) {
-            is StatsEvent.ChangeSort -> changeSort(event.sortBy)
-            is StatsEvent.ChangeTab  -> changeTab(event.tab)
-            is StatsEvent.Back       -> { /* 由 NavController 处理 */ }
+            is StatsEvent.ChangeSort      -> changeSort(event.sortBy)
+            is StatsEvent.ChangeTab       -> changeTab(event.tab)
+            is StatsEvent.ShowHistory     -> { /* 由 NavController 处理 */ }
+            is StatsEvent.ShowLikedAds    -> { /* 由 NavController 处理 */ }
+            is StatsEvent.ShowCollectedAds -> { /* 由 NavController 处理 */ }
+            is StatsEvent.Back            -> { /* 由 NavController 处理 */ }
         }
     }
 

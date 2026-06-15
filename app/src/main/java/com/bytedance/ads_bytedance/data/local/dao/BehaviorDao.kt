@@ -29,4 +29,17 @@ interface BehaviorDao {
     /** 清空行为记录 */
     @Query("DELETE FROM user_behaviors")
     suspend fun deleteAll()
+
+    /**
+     * 获取浏览历史：按行为类型筛选，去重 ad_id，按最近一次点击时间降序
+     *
+     * 用于统计页面"浏览记录"——每广告只出现一次，按最后点击时间排序。
+     */
+    @Query("""
+        SELECT ad_id FROM user_behaviors
+        WHERE behavior_type = 'CLICK' AND ad_id IS NOT NULL
+        GROUP BY ad_id
+        ORDER BY MAX(timestamp) DESC
+    """)
+    suspend fun getClickHistoryAdIds(): List<String>
 }
