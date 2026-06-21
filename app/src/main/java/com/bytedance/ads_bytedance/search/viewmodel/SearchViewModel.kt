@@ -145,6 +145,8 @@ class SearchViewModel(
                             hasMoreResults = response.page < response.totalPages
                         )
                     }
+                    // 从 Room 恢复互动状态（点赞/收藏）
+                    hydrateInteractionStates(response.items)
                 },
                 onFailure = { error ->
                     _uiState.update {
@@ -171,13 +173,15 @@ class SearchViewModel(
 
             result.fold(
                 onSuccess = { response ->
+                    val combined = _uiState.value.results + response.items
                     _uiState.update {
                         it.copy(
-                            results = it.results + response.items,
+                            results = combined,
                             searchLoadState = LoadState.IDLE,
                             hasMoreResults = response.page < response.totalPages
                         )
                     }
+                    hydrateInteractionStates(response.items)  // 新加载的广告也需要 hydration
                 },
                 onFailure = { error ->
                     _uiState.update {
@@ -209,6 +213,7 @@ class SearchViewModel(
                             hasMoreResults = response.page < response.totalPages
                         )
                     }
+                    hydrateInteractionStates(response.items)
                 },
                 onFailure = { error ->
                     _uiState.update {
@@ -407,6 +412,7 @@ class SearchViewModel(
                             hasMoreResults = response.page < response.totalPages
                         )
                     }
+                    hydrateInteractionStates(response.items)
                 },
                 onFailure = { error ->
                     _uiState.update {
@@ -417,6 +423,25 @@ class SearchViewModel(
                     }
                 }
             )
+        }
+    }
+
+    /**
+     * 从 Room 批量读取互动状态，覆盖 AdItem 的 @Transient 默认值
+     *
+     * 搜索结果中的 AdItem 来自 MockJsonDataSource（@Transient 字段为 false）。
+     * 此方法从 Room 真相源读取，确保搜索结果中的广告标签正确反映用户点赞/收藏状态。
+     */
+    private suspend fun hydrateInteractionStates(ads: List<com.bytedance.ads_bytedance.data.model.AdItem>) {
+        if (ads.isEmpty()) return
+        val adIds = ads.map { it.id }
+        val interactions = withContext(Dispatchers.IO) {
+            behaviorCollector.getInteractionStates(adIds)
+        }
+        for ((adId, entity) in interactions) {
+            val ad = ads.find { it.id == adId } ?: continue
+            if (entity.isLiked) ad.isLiked = true
+            if (entity.isCollected) ad.isCollected = true
         }
     }
 

@@ -188,7 +188,10 @@ fun ChatScreen(
                     ) { message ->
                         ChatBubble(
                             message = message,
-                            onAdClick = onNavigateToDetail
+                            onAdClick = { adId ->
+                                viewModel.onAdClick(adId)   // 记录浏览行为
+                                onNavigateToDetail(adId)
+                            }
                         )
                     }
 

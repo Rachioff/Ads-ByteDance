@@ -141,4 +141,48 @@ class BehaviorCollector(
             }
         }
     }
+
+    /**
+     * 删除指定广告的行为事件记录
+     *
+     * 当用户取消点赞/收藏时调用，确保 [UserProfileEngine] 的标签权重计算
+     * 不再累加已取消的行为。
+     *
+     * 此方法删除 [BehaviorEntity]（行为事件流水），不同于 [updateInteraction]
+     * 更新的是 [UserInteractionEntity]（互动状态快照）。
+     *
+     * @param adId 广告 ID
+     * @param type 要删除的行为类型（LIKE / COLLECT）
+     */
+    fun removeBehavior(adId: String, type: BehaviorType) {
+        scope.launch {
+            try {
+                behaviorDao.deleteByAdIdAndType(adId, type.name)
+            } catch (_: Exception) {
+                // 静默失败：行为删除失败不影响用户主流程
+            }
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // 互动状态读取（供 ViewModel hydration 使用）
+    // ═══════════════════════════════════════════════════════
+
+    /**
+     * 从 Room 批量读取互动状态
+     *
+     * 供所有 ViewModel 在加载广告数据后调用，覆盖 [AdItem.isLiked]/[isCollected]
+     * 的 [@Transient] 默认值，确保跨进程重启和跨页面状态一致。
+     *
+     * @param adIds 需要查询的广告 ID 列表
+     * @return adId → UserInteractionEntity 的映射（不存在则不在 Map 中）
+     */
+    suspend fun getInteractionStates(adIds: List<String>): Map<String, UserInteractionEntity> {
+        if (adIds.isEmpty()) return emptyMap()
+        return try {
+            interactionDao.getByAdIds(adIds).associateBy { it.adId }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
 }

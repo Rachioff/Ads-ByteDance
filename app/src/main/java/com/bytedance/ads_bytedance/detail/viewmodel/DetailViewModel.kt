@@ -102,9 +102,13 @@ class DetailViewModel(
             }
             result.fold(
                 onSuccess = { ad ->
-                    // 初始化互动状态（从数据源获取的当前值）
-                    likedAdIds[adId] = ad.isLiked
-                    collectedAdIds[adId] = ad.isCollected
+                    // 从 Room 读取真实互动状态（覆盖 @Transient 默认值，确保跨进程重启一致）
+                    val interactions = withContext(Dispatchers.IO) {
+                        behaviorCollector.getInteractionStates(listOf(adId))
+                    }
+                    val interaction = interactions[adId]
+                    likedAdIds[adId] = interaction?.isLiked ?: ad.isLiked
+                    collectedAdIds[adId] = interaction?.isCollected ?: ad.isCollected
                     uiState = uiState.copy(
                         ad = ad,
                         loadState = LoadState.IDLE
@@ -154,9 +158,12 @@ class DetailViewModel(
         // 向 Room 更新互动状态（模拟服务端状态管理——点赞/取消都更新）
         behaviorCollector.updateInteraction(adId, isLiked = newLiked)
 
-        // 仅在正向点赞时记录行为（用于画像计算，取消点赞不记录）
         if (newLiked) {
+            // 正向点赞 → 记录行为（贡献标签偏好得分）
             collectBehavior(adId, BehaviorType.LIKE)
+        } else {
+            // 取消点赞 → 删除旧的行为记录（不再贡献标签偏好得分）
+            behaviorCollector.removeBehavior(adId, BehaviorType.LIKE)
         }
 
         // 异步委托给 Repository → DataSource → 跨页面缓存同步
@@ -178,9 +185,12 @@ class DetailViewModel(
         // 向 Room 更新互动状态（模拟服务端状态管理——收藏/取消都更新）
         behaviorCollector.updateInteraction(adId, isCollected = newCollected)
 
-        // 仅在正向收藏时记录行为（用于画像计算，取消收藏不记录）
         if (newCollected) {
+            // 正向收藏 → 记录行为（贡献标签偏好得分）
             collectBehavior(adId, BehaviorType.COLLECT)
+        } else {
+            // 取消收藏 → 删除旧的行为记录（不再贡献标签偏好得分）
+            behaviorCollector.removeBehavior(adId, BehaviorType.COLLECT)
         }
 
         // 异步委托给 Repository → DataSource → 跨页面缓存同步

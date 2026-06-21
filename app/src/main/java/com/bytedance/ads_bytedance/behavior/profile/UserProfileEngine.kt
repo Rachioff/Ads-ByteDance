@@ -50,8 +50,10 @@ class UserProfileEngine(
      * 计算用户兴趣画像
      *
      * 遍历所有行为记录，按标签聚合加权得分。
-     * 标签权重仅累加正向行为（LIKE/COLLECT/CLICK/SHARE/TAG_CLICK/SEARCH），
-     * 取消点赞/收藏不会记录到行为表，因此不会虚增标签偏好得分。
+     *
+     * 标签权重来自正向行为（LIKE/COLLECT/CLICK/SHARE/TAG_CLICK/SEARCH）。
+     * 当用户取消点赞/收藏时，ViewModel 会调用 BehaviorCollector.removeBehavior()
+     * 删除对应的旧行为记录，确保标签偏好得分始终反映当前有效行为。
      *
      * totalLikes / totalCollects 从 user_interactions 表读取当前状态，
      * 确保"取消"操作会反映在统计数字中。

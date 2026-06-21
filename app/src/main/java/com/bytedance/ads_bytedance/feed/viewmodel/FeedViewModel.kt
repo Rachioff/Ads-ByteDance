@@ -128,6 +128,8 @@ class FeedViewModel(
                         loadState = if (response.page >= response.totalPages) LoadState.END
                             else LoadState.IDLE
                     )
+                    // 从 Room 恢复持久化的互动状态（点赞/收藏）
+                    hydrateInteractionStates(ranked)
                     // 异步生成 AI 摘要/标签（不阻塞 UI）
                     generateAiContent(ranked)
                 },
@@ -178,6 +180,8 @@ class FeedViewModel(
                             else LoadState.IDLE,
                         activeFilterTag = repository.getActiveFilterTag(channel)
                     )
+                    // 从 Room 恢复持久化的互动状态（覆盖清空的快照）
+                    hydrateInteractionStates(ranked)
                     generateAiContent(ranked)
                 },
                 onFailure = { error ->
@@ -214,6 +218,8 @@ class FeedViewModel(
                         loadState = if (pagination.loadState == LoadState.END) LoadState.END
                             else LoadState.IDLE
                     )
+                    // 从 Room 恢复互动状态（新加载的广告也需要 hydration）
+                    hydrateInteractionStates(ranked)
                     // 仅对新加载的广告（无缓存的）生成 AI 内容
                     val newAds = ranked.filter { it.id !in aiContentMap }
                     if (newAds.isNotEmpty()) {
@@ -242,9 +248,12 @@ class FeedViewModel(
         // 向 Room 更新互动状态（模拟服务端状态管理——点赞/取消都更新）
         behaviorCollector.updateInteraction(adId, isLiked = newLiked)
 
-        // 仅在正向点赞时记录行为（用于画像计算，取消点赞不记录）
         if (newLiked) {
+            // 正向点赞 → 记录行为（贡献标签偏好得分）
             collectBehavior(adId, BehaviorType.LIKE)
+        } else {
+            // 取消点赞 → 删除旧的行为记录（不再贡献标签偏好得分）
+            behaviorCollector.removeBehavior(adId, BehaviorType.LIKE)
         }
 
         // 异步委托给 Repository → DataSource（Mock: 内存计数联动 / Remote: API 调用）
@@ -271,9 +280,12 @@ class FeedViewModel(
         // 向 Room 更新互动状态（模拟服务端状态管理——收藏/取消都更新）
         behaviorCollector.updateInteraction(adId, isCollected = newCollected)
 
-        // 仅在正向收藏时记录行为（用于画像计算，取消收藏不记录）
         if (newCollected) {
+            // 正向收藏 → 记录行为（贡献标签偏好得分）
             collectBehavior(adId, BehaviorType.COLLECT)
+        } else {
+            // 取消收藏 → 删除旧的行为记录（不再贡献标签偏好得分）
+            behaviorCollector.removeBehavior(adId, BehaviorType.COLLECT)
         }
 
         // 异步委托给 Repository → DataSource
@@ -362,6 +374,7 @@ class FeedViewModel(
                         loadState = if (response.page >= response.totalPages) LoadState.END
                             else LoadState.IDLE
                     )
+                    hydrateInteractionStates(response.items)
                 },
                 onFailure = { error ->
                     uiState = uiState.copy(loadState = LoadState.ERROR)
@@ -385,6 +398,7 @@ class FeedViewModel(
                         loadState = if (response.page >= response.totalPages) LoadState.END
                             else LoadState.IDLE
                     )
+                    hydrateInteractionStates(response.items)
                 },
                 onFailure = { error ->
                     uiState = uiState.copy(loadState = LoadState.ERROR)
@@ -423,6 +437,24 @@ class FeedViewModel(
                 timestamp = System.currentTimeMillis()
             )
         )
+    }
+
+    /**
+     * 从 Room 批量读取互动状态，覆盖 [AdItem.isLiked]/[isCollected] 的 @Transient 默认值
+     *
+     * 在 loadFirstPage / refresh / loadMore / filterByTag 等加载广告的路径中调用，
+     * 确保跨进程重启和跨页面跳转后，点赞/收藏状态与 Room 真相源一致。
+     */
+    private suspend fun hydrateInteractionStates(ads: List<AdItem>) {
+        if (ads.isEmpty()) return
+        val adIds = ads.map { it.id }
+        val interactions = withContext(Dispatchers.IO) {
+            behaviorCollector.getInteractionStates(adIds)
+        }
+        for ((adId, entity) in interactions) {
+            if (entity.isLiked) likedAdIds[adId] = true
+            if (entity.isCollected) collectedAdIds[adId] = true
+        }
     }
 
     /** 广告曝光处理——递增曝光计数 */

@@ -1,5 +1,7 @@
 package com.bytedance.ads_bytedance.ai.chat.preload
 
+import android.util.Log
+import com.bytedance.ads_bytedance.BuildConfig
 import com.bytedance.ads_bytedance.ai.api.ChatBotService
 import com.bytedance.ads_bytedance.ai.chat.cache.ChatMemoryCache
 import com.bytedance.ads_bytedance.ai.chat.model.ChatRole
@@ -44,15 +46,26 @@ class ChatPreloader(
      */
     suspend fun preload() {
         // 幂等：已预热则跳过
-        if (cache.isWarm()) return
+        if (cache.isWarm()) {
+            Log.d(TAG, "预加载跳过：缓存已预热")
+            return
+        }
 
         // 无历史 session 则跳过
-        val sessionId = sessionManager.getLastSessionId() ?: return
+        val sessionId = sessionManager.getLastSessionId()
+        if (sessionId == null) {
+            Log.d(TAG, "预加载跳过：无已保存的 sessionId")
+            return
+        }
 
         try {
+            Log.d(TAG, "预加载开始: sessionId=$sessionId, URL=${BuildConfig.CHATBOT_SERVICE_URL}")
             // 1. 从服务端获取历史消息
             val response = chatBotService.getHistory(sessionId, limit = 20)
-            if (!response.isSuccessful || response.body()?.isSuccess != true) return
+            if (!response.isSuccessful || response.body()?.isSuccess != true) {
+                Log.w(TAG, "预加载失败: HTTP ${response.code()}, isSuccess=${response.body()?.isSuccess}")
+                return
+            }
 
             val history = response.body()!!.data ?: return
 
@@ -64,10 +77,14 @@ class ChatPreloader(
 
             // 4. 写入缓存
             cache.setMessages(messages, sessionId)
-        } catch (_: Exception) {
-            // 静默失败：网络不可用或服务未就绪，
-            // ChatViewModel 在用户进入 ChatScreen 时走 loadHistory 正常路径
+            Log.i(TAG, "预加载完成: ${messages.size} 条消息写入缓存")
+        } catch (e: Exception) {
+            Log.e(TAG, "预加载异常: ${e.javaClass.simpleName}: ${e.message}", e)
         }
+    }
+
+    companion object {
+        private const val TAG = "ChatPreloader"
     }
 
     /**

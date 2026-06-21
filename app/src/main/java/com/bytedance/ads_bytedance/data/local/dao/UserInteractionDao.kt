@@ -32,4 +32,8 @@ interface UserInteractionDao {
     /** 获取所有已收藏广告的 adId 列表（按收藏时间降序） */
     @Query("SELECT ad_id FROM user_interactions WHERE is_collected = 1 ORDER BY collected_at DESC")
     suspend fun getCollectedAdIds(): List<String>
+
+    /** 批量查询互动状态（供 ViewModel hydration 使用，避免 N+1 查询） */
+    @Query("SELECT * FROM user_interactions WHERE ad_id IN (:adIds)")
+    suspend fun getByAdIds(adIds: List<String>): List<UserInteractionEntity>
 }

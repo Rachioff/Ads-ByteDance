@@ -12,6 +12,8 @@ import com.bytedance.ads_bytedance.ai.chat.model.ChatUiMessage
 import com.bytedance.ads_bytedance.ai.chat.model.ChatUiState
 import com.bytedance.ads_bytedance.ai.chat.model.CreateSessionRequest
 import com.bytedance.ads_bytedance.ai.chat.model.SendMessageRequest
+import android.util.Log
+import com.bytedance.ads_bytedance.BuildConfig
 import com.bytedance.ads_bytedance.behavior.model.BehaviorType
 import com.bytedance.ads_bytedance.behavior.model.UserBehavior
 import com.bytedance.ads_bytedance.behavior.tracker.BehaviorCollector
@@ -93,8 +95,10 @@ class ChatViewModel(
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
     init {
+        Log.d(TAG, "ChatViewModel init: cacheWarm=${chatCache.isWarm()}, savedSessionId=${sessionManager.getLastSessionId()}, URL=${BuildConfig.CHATBOT_SERVICE_URL}")
         // 1. 优先检查内存缓存（应用启动时由 ChatPreloader 预热）
         if (chatCache.isWarm()) {
+            Log.d(TAG, "使用预热缓存: ${chatCache.getMessages().size} 条消息")
             _uiState.update {
                 it.copy(
                     sessionId = chatCache.getSessionId(),
@@ -107,8 +111,10 @@ class ChatViewModel(
             // 缓存未命中 → 尝试恢复历史 session
             val savedSessionId = sessionManager.getLastSessionId()
             if (savedSessionId != null) {
+                Log.d(TAG, "缓存未命中，尝试恢复历史: $savedSessionId")
                 loadHistory(savedSessionId)
             } else {
+                Log.d(TAG, "无缓存无历史，创建新 session")
                 createSession()
             }
         }
@@ -126,6 +132,32 @@ class ChatViewModel(
     /** 更新输入框文本 */
     fun updateInputText(text: String) {
         _uiState.update { it.copy(inputText = text) }
+    }
+
+    /**
+     * 广告卡片点击 — 记录浏览行为 + 递增点击计数
+     *
+     * ChatScreen 中嵌入广告卡片被点击时调用，确保聊天搜索结果中的广告点击
+     * 也能记录到浏览历史（BehaviorDao CLICK）和统计数据（clickCount）。
+     * 与 FeedViewModel.navigateToDetail() 保持一致的行为采集模式。
+     */
+    fun onAdClick(adId: String) {
+        // 记录 CLICK 行为（异步写入 Room）
+        behaviorCollector.collect(
+            UserBehavior(
+                id = UUID.randomUUID().toString(),
+                adId = adId,
+                behaviorType = BehaviorType.CLICK,
+                tags = emptyList(),
+                timestamp = System.currentTimeMillis()
+            )
+        )
+        // 递增点击计数
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                repository.incrementClick(adId)
+            }
+        }
     }
 
     /**
@@ -160,6 +192,7 @@ class ChatViewModel(
             if (_uiState.value.isServiceAvailable && _uiState.value.sessionId != null) {
                 sendToService(trimmed)
             } else {
+                Log.w(TAG, "进入降级路径: isServiceAvailable=${_uiState.value.isServiceAvailable}, sessionId=${_uiState.value.sessionId}")
                 fallbackToOnlineSearch(trimmed)
             }
         }
@@ -248,10 +281,13 @@ class ChatViewModel(
                     }
                 } else {
                     // 历史恢复失败——创建新 session
+                    val code = response.code()
+                    Log.w(TAG, "历史加载失败: HTTP $code, isSuccess=${response.body()?.isSuccess}")
                     _uiState.update { it.copy(isLoadingHistory = false) }
                     createSession()
                 }
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                Log.e(TAG, "历史加载异常: ${e.javaClass.simpleName}: ${e.message}", e)
                 _uiState.update { it.copy(isLoadingHistory = false) }
                 createSession()
             }
@@ -294,7 +330,9 @@ class ChatViewModel(
      */
     private fun createSession() {
         viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
             try {
+                Log.d(TAG, "正在创建 session → URL: ${BuildConfig.CHATBOT_SERVICE_URL}")
                 val response = withContext(Dispatchers.IO) {
                     chatBotService.createSession(CreateSessionRequest())
                 }
@@ -304,14 +342,20 @@ class ChatViewModel(
                     _uiState.update {
                         it.copy(
                             sessionId = session.sessionId,
-                            isServiceAvailable = true
+                            isServiceAvailable = true,
+                            isLoading = false
                         )
                     }
+                    Log.i(TAG, "Session 创建成功: ${session.sessionId}")
                 } else {
-                    markServiceUnavailable()
+                    val code = response.code()
+                    val errorBody = try { response.errorBody()?.string() } catch (_: Exception) { "N/A" }
+                    Log.e(TAG, "Session 创建失败: HTTP $code, body=$errorBody")
+                    markServiceUnavailable("服务端返回错误 HTTP $code")
                 }
-            } catch (_: Exception) {
-                markServiceUnavailable()
+            } catch (e: Exception) {
+                Log.e(TAG, "Session 创建异常: ${e.javaClass.simpleName}: ${e.message}", e)
+                markServiceUnavailable("${e.javaClass.simpleName}: ${e.message}")
             }
         }
     }
@@ -346,13 +390,42 @@ class ChatViewModel(
     }
 
     /** 标记微服务不可用 */
-    private fun markServiceUnavailable() {
+    private fun markServiceUnavailable(reason: String? = null) {
+        if (reason != null) {
+            Log.w(TAG, "微服务不可用: $reason")
+        }
         _uiState.update {
             it.copy(
                 sessionId = null,
-                isServiceAvailable = false
+                isServiceAvailable = false,
+                isLoading = false,
+                errorMessage = reason  // 将错误原因展示给用户
             )
         }
+    }
+
+    /**
+     * 从 Room 批量读取互动状态，更新 AdItem 的 @Transient 字段
+     *
+     * ChatViewModel 中展示的广告来自 AdMatchingEngine（sendToService）或
+     * AdRepository.searchAds（fallback），二者的 AdItem 都是 @Transient 默认值。
+     * 此方法从 Room 真相源读取，确保聊天中的广告卡片也能反映用户的实际点赞/收藏状态。
+     */
+    private suspend fun hydrateInteractionStates(ads: List<AdItem>) {
+        if (ads.isEmpty()) return
+        val adIds = ads.map { it.id }
+        val interactions = withContext(Dispatchers.IO) {
+            behaviorCollector.getInteractionStates(adIds)
+        }
+        for ((adId, entity) in interactions) {
+            val ad = ads.find { it.id == adId } ?: continue
+            if (entity.isLiked) ad.isLiked = true
+            if (entity.isCollected) ad.isCollected = true
+        }
+    }
+
+    companion object {
+        private const val TAG = "ChatViewModel"
     }
 
     /**
@@ -403,6 +476,9 @@ class ChatViewModel(
                     emptyList()
                 }
 
+                // 从 Room 恢复互动状态（覆盖 @Transient 默认值）
+                hydrateInteractionStates(matchedAds)
+
                 // 保存匹配结果摘要，下一轮消息时回传给 AI
                 lastMatchedAdContexts = if (matchedAds.isNotEmpty()) {
                     matchedAds.map { ad ->
@@ -434,9 +510,11 @@ class ChatViewModel(
                 }
                 chatCache.addMessage(aiMsg)
             } else {
+                Log.w(TAG, "sendToService 响应失败: HTTP ${response.code()}, isSuccess=${response.body()?.isSuccess}")
                 fallbackToOnlineSearch(query)
             }
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            Log.e(TAG, "sendToService 异常: ${e.javaClass.simpleName}: ${e.message}", e)
             fallbackToOnlineSearch(query)
         }
     }
@@ -478,6 +556,9 @@ class ChatViewModel(
             repository.searchAds(query, page = 1, pageSize = 50)
         }
         val matchedAds = result.getOrNull()?.items ?: emptyList()
+
+        // 从 Room 恢复互动状态
+        hydrateInteractionStates(matchedAds)
 
         val content = buildString {
             append("搜索服务暂不可用，以下是在线匹配结果：")

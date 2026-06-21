@@ -26,6 +26,15 @@ interface BehaviorDao {
     @Query("SELECT * FROM user_behaviors WHERE ad_id = :adId ORDER BY timestamp DESC")
     suspend fun getByAdId(adId: String): List<BehaviorEntity>
 
+    /**
+     * 删除指定广告的指定行为类型记录
+     *
+     * 用于取消点赞/收藏时清理对应的行为事件，确保 [UserProfileEngine] 的标签权重
+     * 计算只反映当前有效行为——历史 LIKE/COLLECT 记录在取消后不应继续贡献标签偏好得分。
+     */
+    @Query("DELETE FROM user_behaviors WHERE ad_id = :adId AND behavior_type = :behaviorType")
+    suspend fun deleteByAdIdAndType(adId: String, behaviorType: String)
+
     /** 清空行为记录 */
     @Query("DELETE FROM user_behaviors")
     suspend fun deleteAll()

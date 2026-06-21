@@ -43,7 +43,7 @@ android {
 
         // Chat Bot 微服务地址（从 local.properties 注入）
         buildConfigField("String", "CHATBOT_SERVICE_URL",
-            "\"${localProperties.getProperty("chatbot.service.url", "http://localhost:8080")}\"")
+            "\"${localProperties.getProperty("chatbot.service.url", "http://10.0.2.2:8080/")}\"")
     }
 
     buildTypes {

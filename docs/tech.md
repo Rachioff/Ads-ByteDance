@@ -206,14 +206,14 @@ app/
 #### 4.1.1 核心数据模型（Kotlin 多态序列化）
 
 ```kotlin
-// 广告卡片类型枚举
-@Serializable
+// 广告卡片
 enum class AdType { LARGE_IMAGE, SMALL_IMAGE, VIDEO }
 
 // 广告频道
 @Serializable
 enum class Channel { FEATURED, ECOMMERCE, LOCAL }
-
+类型枚举
+@Serializable
 // 广告基类（密封类实现多态）
 @Serializable
 sealed class AdItem {
